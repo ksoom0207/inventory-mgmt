@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="QR로 인프라 자산을 빠르게 등록하는 모바일 재고 앱">
+  <title>InfraStock Mobile</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/mobile.css?v=inventory-nav-1">
+  <script src="/mobile.js?v=asset-specs-2" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+  <header class="app-header">
+    <a class="brand" href="/mobile" aria-label="InfraStock 모바일 홈">
+      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg>
+      <span>InfraStock</span>
+    </a>
+    <a class="inventory-nav" href="/app">
+      <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M9 14h12"/></svg>
+      <span>전체 재고</span>
+    </a>
+  </header>
+
+  <main id="main" class="app-shell" tabindex="-1">
+    <section id="screen-home" class="screen" aria-labelledby="home-title">
+      <div class="eyebrow">모바일 자산 등록</div>
+      <h1 id="home-title">현장에서 바로<br>스캔하고 등록하세요</h1>
+      <p class="lead">자산 ID를 확인한 뒤 자산 유형과 Site를 선택하면 끝납니다. SVR은 서버, NET은 네트워크 장비로 자동 등록됩니다.</p>
+
+      <button id="start-scan" class="scan-button" type="button">
+        <span class="scan-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/></svg>
+        </span>
+        <span><strong>QR 스캔</strong><small>카메라로 자산 ID 읽기</small></span>
+        <svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+
+      <div class="divider"><span>또는</span></div>
+
+      <form id="asset-lookup-form" class="lookup-card" novalidate>
+        <label for="asset-code">자산 ID 직접 입력</label>
+        <div class="input-row">
+          <input id="asset-code" name="asset_code" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ASSET / SVR / NET-00000001" aria-describedby="asset-code-hint asset-code-error">
+          <button class="icon-button" type="submit" aria-label="자산 ID 조회">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+        <p id="asset-code-hint" class="field-hint">QR 아래에 적힌 8자리 번호를 입력하세요.</p>
+        <p id="asset-code-error" class="field-error" role="alert"></p>
+      </form>
+
+      <section class="recent-section" aria-labelledby="recent-title">
+        <div class="section-heading">
+          <h2 id="recent-title">최근 작업</h2>
+          <button id="clear-recent" class="text-button" type="button" hidden>지우기</button>
+        </div>
+        <div id="recent-list" class="recent-list"></div>
+      </section>
+    </section>
+
+    <section id="screen-scanner" class="screen" hidden aria-labelledby="scanner-title">
+      <div class="screen-topbar">
+        <button class="back-button" type="button" data-go-home aria-label="홈으로 돌아가기">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div><div class="eyebrow">자산 ID</div><h1 id="scanner-title">QR 스캔</h1></div>
+      </div>
+
+      <div class="camera-frame">
+        <video id="camera-preview" playsinline muted aria-label="QR 스캔 카메라 미리보기"></video>
+        <div class="scan-guide" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+        <div id="camera-placeholder" class="camera-placeholder">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/></svg>
+        </div>
+      </div>
+      <p id="scanner-status" class="scanner-status" role="status" aria-live="polite">카메라를 준비하고 있습니다.</p>
+      <div id="scanner-recovery" class="recovery-card" hidden>
+        <strong>카메라를 사용할 수 없습니다</strong>
+        <p>휴대폰 기본 카메라로 QR을 열거나 자산 ID를 직접 입력하세요.</p>
+        <button id="retry-camera" class="button secondary" type="button">다시 시도</button>
+      </div>
+      <button class="button secondary full-width" type="button" data-go-home>자산 ID 직접 입력</button>
+    </section>
+
+    <section id="screen-register" class="screen has-sticky-action" hidden aria-labelledby="register-title">
+      <div class="screen-topbar">
+        <button class="back-button" type="button" data-go-home aria-label="등록 취소하고 홈으로 돌아가기">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div><div class="eyebrow">미등록 라벨</div><h1 id="register-title">새 자산 등록</h1></div>
+      </div>
+
+      <div class="asset-code-card">
+        <span>자산 ID</span>
+        <strong id="register-code">ASSET-00000000</strong>
+        <span class="status-badge neutral">미등록</span>
+      </div>
+
+      <form id="register-form" novalidate>
+        <div id="server-registration-note" class="form-note" hidden>SVR 라벨은 자산 유형을 SERVER로 자동 지정합니다.</div>
+
+        <fieldset id="asset-type-fieldset" aria-describedby="asset-type-error">
+          <legend>자산 유형 <span aria-hidden="true">*</span></legend>
+          <div id="asset-type-options" class="choice-grid type-grid"></div>
+          <p id="asset-type-error" class="field-error" role="alert"></p>
+        </fieldset>
+
+        <fieldset aria-describedby="site-type-error">
+          <legend>현재 Site <span aria-hidden="true">*</span></legend>
+          <div class="choice-grid site-grid">
+            <label class="choice-card"><input type="radio" name="site_type" value="IDC"><span><strong>IDC</strong><small>데이터센터</small></span></label>
+            <label class="choice-card"><input type="radio" name="site_type" value="OFFICE"><span><strong>Office</strong><small>사무실·창고</small></span></label>
+          </div>
+          <p id="site-type-error" class="field-error" role="alert"></p>
+        </fieldset>
+
+        <p class="form-note">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 10v6M12 7h.01"/></svg>
+          제조사, 모델, Serial과 상세 위치는 등록 후 추가할 수 있습니다.
+        </p>
+
+        <div class="sticky-action">
+          <p id="register-error" class="submit-error" role="alert" aria-live="assertive"></p>
+          <button id="register-submit" class="button primary full-width" type="submit">자산 등록</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="screen-complete" class="screen centered" hidden aria-labelledby="complete-title">
+      <div class="success-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></div>
+      <div class="eyebrow">등록 완료</div>
+      <h1 id="complete-title">재고 원장에 추가했습니다</h1>
+      <p class="lead">다음 QR을 바로 등록하거나 자산 정보를 확인하세요.</p>
+      <dl id="complete-summary" class="summary-card"></dl>
+      <div class="action-stack">
+        <button id="scan-next" class="button primary full-width" type="button">다음 QR 등록</button>
+        <button id="view-complete-asset" class="button secondary full-width" type="button">자산 상세보기</button>
+        <button class="text-button large" type="button" data-go-home>홈으로</button>
+      </div>
+    </section>
+
+    <section id="screen-detail" class="screen" hidden aria-labelledby="detail-title">
+      <div class="screen-topbar">
+        <button class="back-button" type="button" data-go-home aria-label="홈으로 돌아가기">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div><div class="eyebrow">등록 자산</div><h1 id="detail-title">자산 상세</h1></div>
+      </div>
+      <article class="detail-card">
+        <div class="detail-identity"><span id="detail-type" class="asset-type-mark"></span><div><strong id="detail-code"></strong><span id="detail-status" class="status-badge success"></span></div></div>
+        <dl class="detail-list">
+          <div><dt>현재 Site</dt><dd id="detail-site"></dd></div>
+          <div><dt>상세 위치</dt><dd id="detail-location" class="muted">미지정</dd></div>
+          <div><dt>Serial</dt><dd id="detail-serial" class="muted">미입력</dd></div>
+          <div><dt>P/N</dt><dd id="detail-part-number" class="muted">미입력</dd></div>
+          <div><dt>제조사 · 모델</dt><dd id="detail-manufacturer-model" class="muted">미입력</dd></div>
+          <div><dt>사양</dt><dd id="detail-specifications" class="muted">미입력</dd></div>
+          <div id="detail-assignment-row" hidden><dt>사용처</dt><dd id="detail-assignment"></dd></div>
+        </dl>
+      </article>
+      <button id="open-details" class="button secondary full-width assignment-button" type="button">정보 수정</button>
+      <div class="detail-actions">
+        <button id="open-move" class="button secondary" type="button">위치 이동</button>
+        <button id="open-status" class="button secondary" type="button">상태 변경</button>
+        <button id="open-history" class="button secondary" type="button">이력 보기</button>
+      </div>
+      <button id="open-install" class="button secondary full-width assignment-button" type="button">서버 장착</button>
+      <button id="open-remove" class="button secondary full-width assignment-button" type="button" hidden>서버 탈착</button>
+      <button id="detail-scan-next" class="button primary full-width" type="button">다음 QR 등록</button>
+    </section>
+
+    <section id="screen-edit-details" class="screen has-sticky-action" hidden aria-labelledby="edit-details-title">
+      <div class="screen-topbar"><button class="back-button" type="button" data-back-detail aria-label="자산 상세로 돌아가기">←</button><div><h1 id="edit-details-title">정보 수정</h1></div></div>
+      <p id="edit-details-code" class="form-note"></p>
+      <form id="edit-details-form">
+        <div class="form-field"><label for="edit-serial">Serial</label><input id="edit-serial" type="text" maxlength="240" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="제조사 일련번호"></div>
+        <div class="form-field"><label for="edit-manufacturer">제조사</label><input id="edit-manufacturer" type="text" maxlength="240" placeholder="예: Dell"></div>
+        <div class="form-field"><label for="edit-model">모델</label><input id="edit-model" type="text" maxlength="240" placeholder="예: PowerEdge R750"></div>
+        <div class="form-field"><label for="edit-part-number">P/N (제조사 부품번호)</label><input id="edit-part-number" type="text" maxlength="240" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="part-number-hint"><p id="part-number-hint" class="field-hint">제품 라벨의 Part Number를 입력하세요. 개별 제품의 Serial과는 다릅니다.</p></div>
+        <fieldset><legend>부품 사양</legend><div id="edit-specifications"></div></fieldset>
+        <p class="field-hint">모두 선택 항목입니다. 값을 지우고 저장하면 미입력으로 변경됩니다.</p>
+        <div class="sticky-action"><p id="edit-details-error" class="submit-error" role="alert"></p><button id="edit-details-submit" class="button primary full-width" type="submit">저장</button></div>
+      </form>
+    </section>
+
+    <section id="screen-move" class="screen has-sticky-action" hidden aria-labelledby="move-title">
+      <div class="screen-topbar"><button class="back-button" type="button" data-back-detail aria-label="자산 상세로 돌아가기"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><div><div class="eyebrow">현재 위치 변경</div><h1 id="move-title">자산 이동</h1></div></div>
+      <p id="move-current" class="form-note"></p>
+      <form id="move-form">
+        <fieldset><legend>새 Site <span aria-hidden="true">*</span></legend><div class="choice-grid site-grid"><label class="choice-card"><input type="radio" name="site_type" value="IDC"><span><strong>IDC</strong><small>데이터센터</small></span></label><label class="choice-card"><input type="radio" name="site_type" value="OFFICE"><span><strong>Office</strong><small>사무실·창고</small></span></label></div><p id="move-site-error" class="field-error" role="alert"></p></fieldset>
+        <div class="form-field"><label for="move-location">상세 위치</label><input id="move-location" type="text" maxlength="240" placeholder="예: IDC-A / Rack-03"><p class="field-hint">모르면 비워둘 수 있습니다.</p></div>
+        <div class="form-field"><label for="move-memo">이동 메모</label><textarea id="move-memo" maxlength="500" rows="3" placeholder="이동 사유 또는 참고사항"></textarea></div>
+        <div class="sticky-action"><p id="move-error" class="submit-error" role="alert"></p><button id="move-submit" class="button primary full-width" type="submit">이동 완료</button></div>
+      </form>
+    </section>
+
+    <section id="screen-status" class="screen has-sticky-action" hidden aria-labelledby="status-title">
+      <div class="screen-topbar"><button class="back-button" type="button" data-back-detail aria-label="자산 상세로 돌아가기"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><div><div class="eyebrow">운영 상태</div><h1 id="status-title">상태 변경</h1></div></div>
+      <form id="status-form">
+        <div class="form-field"><label for="new-status">새 상태</label><select id="new-status" required><option value="AVAILABLE">사용 가능</option><option value="IN_USE">사용 중</option><option value="RESERVED">예약</option><option value="FAULTY">장애</option><option value="RMA">RMA</option><option value="REPAIR">수리 중</option><option value="DISPOSED">폐기</option><option value="LOST">분실</option><option value="UNKNOWN">확인 필요</option></select></div>
+        <div class="form-field"><label for="status-memo">변경 메모</label><textarea id="status-memo" maxlength="500" rows="3" placeholder="상태 변경 사유"></textarea></div>
+        <div class="sticky-action"><p id="status-error" class="submit-error" role="alert"></p><button id="status-submit" class="button primary full-width" type="submit">상태 변경</button></div>
+      </form>
+    </section>
+
+    <section id="screen-history" class="screen" hidden aria-labelledby="history-title">
+      <div class="screen-topbar"><button class="back-button" type="button" data-back-detail aria-label="자산 상세로 돌아가기"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><div><div class="eyebrow">변경 기록</div><h1 id="history-title">자산 이력</h1></div></div>
+      <div id="history-list" class="history-list" aria-live="polite"></div>
+    </section>
+
+    <section id="screen-install" class="screen has-sticky-action" hidden aria-labelledby="install-title">
+      <div class="screen-topbar"><button class="back-button" type="button" data-back-detail aria-label="자산 상세로 돌아가기"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><div><div class="eyebrow">사용처 연결</div><h1 id="install-title">서버 장착</h1></div></div>
+      <form id="install-form">
+        <div class="form-field"><label for="target-server">서버 ID</label><input id="target-server" type="text" required pattern="(SVR|SRV)-[0-9]{8}" placeholder="SVR-00000001" autocomplete="off" autocapitalize="characters"><p class="field-hint">등록된 SVR 라벨 번호를 입력하세요.</p></div>
+        <div class="form-field"><label for="target-slot">Slot / Bay</label><input id="target-slot" type="text" maxlength="120" placeholder="예: Bay-04"></div>
+        <div class="sticky-action"><p id="install-error" class="submit-error" role="alert"></p><button id="install-submit" class="button primary full-width" type="submit">장착 완료</button></div>
+      </form>
+    </section>
+
+    <section id="screen-remove" class="screen has-sticky-action" hidden aria-labelledby="remove-title">
+      <div class="screen-topbar"><button class="back-button" type="button" data-back-detail aria-label="자산 상세로 돌아가기"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><div><div class="eyebrow">사용처 종료</div><h1 id="remove-title">서버 탈착</h1></div></div>
+      <form id="remove-form">
+        <fieldset><legend>탈착 후 Site <span aria-hidden="true">*</span></legend><div class="choice-grid site-grid"><label class="choice-card"><input type="radio" name="site_type" value="IDC"><span><strong>IDC</strong></span></label><label class="choice-card"><input type="radio" name="site_type" value="OFFICE"><span><strong>Office</strong></span></label></div><p id="remove-site-error" class="field-error" role="alert"></p></fieldset>
+        <div class="form-field"><label for="remove-location">상세 위치</label><input id="remove-location" type="text" maxlength="240" placeholder="예: IDC-A / 예비품 선반"></div>
+        <div class="form-field"><label for="remove-reason">탈착 사유</label><textarea id="remove-reason" maxlength="500" rows="3" placeholder="교체, 장애, 점검 등"></textarea></div>
+        <div class="sticky-action"><p id="remove-error" class="submit-error" role="alert"></p><button id="remove-submit" class="button primary full-width" type="submit">탈착 완료</button></div>
+      </form>
+    </section>
+
+    <section id="screen-error" class="screen centered" hidden aria-labelledby="error-title">
+      <div class="error-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.6 2.4 17.3A2 2 0 0 0 4.1 20h15.8a2 2 0 0 0 1.7-2.7L13.7 3.6a2 2 0 0 0-3.4 0Z"/></svg></div>
+      <h1 id="error-title">자산을 찾지 못했습니다</h1>
+      <p id="error-message" class="lead"></p>
+      <button id="error-retry" class="button primary full-width" type="button">다시 입력</button>
+    </section>
+
+    <section id="screen-loading" class="screen centered" hidden aria-labelledby="loading-title">
+      <div class="spinner" aria-hidden="true"></div>
+      <h1 id="loading-title">자산 확인 중</h1>
+      <p class="lead">Inventory 서버에서 자산 ID를 조회하고 있습니다.</p>
+    </section>
+  </main>
+
+  <div id="app-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+</body>
+</html>

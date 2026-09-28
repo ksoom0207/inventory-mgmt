@@ -1,0 +1,18 @@
+services:
+  inventory:
+    build: .
+    container_name: idc-inventory
+    image: inventory-mgmt:v1.0.0
+    ports:
+      - "3004:80"
+    volumes:
+      - inventory-data:/data
+    environment:
+      INVENTORY_AUTH_REQUIRED: "${INVENTORY_AUTH_REQUIRED:-false}"
+      INVENTORY_ADMIN_EMAILS: "${INVENTORY_ADMIN_EMAILS:-}"
+      INVENTORY_OPERATOR_EMAILS: "${INVENTORY_OPERATOR_EMAILS:-}"
+      INVENTORY_PUBLIC_BASE_URL: "${INVENTORY_PUBLIC_BASE_URL:-}"
+    restart: unless-stopped
+
+volumes:
+  inventory-data:

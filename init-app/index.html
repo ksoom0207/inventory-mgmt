@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="개별 자산 원장에서 집계한 전체 인프라 재고 현황">
+  <title>InfraStock · 전체 재고 현황</title>
+  <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/dashboard.css?v=spec-guide-2">
+  <script src="/dashboard.js?v=ssd-groups-1" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/app" aria-label="InfraStock 전체 재고 홈">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg>
+        <span>InfraStock</span>
+      </a>
+      <a class="mobile-link" href="/mobile">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg>
+        모바일 등록
+      </a>
+    </div>
+  </header>
+
+  <main id="main" class="page" tabindex="-1">
+    <div class="page-heading">
+      <div><span class="eyebrow">Inventory overview</span><h1>전체 재고 현황</h1><p>Site·유형별로 집계하며, SSD·HDD는 용량·인터페이스·폼팩터별로 구분합니다.</p></div>
+      <span id="updated-at" class="updated-at" aria-live="polite"></span>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="재고 화면">
+      <button id="tab-stock" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="panel-stock" data-tab="stock">재고 현황</button>
+      <button id="tab-quote" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-quote" data-tab="quote">부품 견적</button>
+      <button id="tab-label" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-label" data-tab="label">QR 라벨</button>
+    </div>
+
+    <section id="panel-stock" role="tabpanel" aria-labelledby="tab-stock">
+      <div class="toolbar" aria-label="재고 필터">
+        <div class="field"><label for="stock-site">Site</label><select id="stock-site"><option value="">전체 Site</option><option value="IDC">IDC</option><option value="OFFICE">Office</option></select></div>
+        <div class="field"><label for="stock-type">자산 유형</label><select id="stock-type"><option value="">전체 유형</option></select></div>
+        <button id="refresh-stock" class="button secondary" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"/><path d="M18.5 9a7 7 0 0 0-12-2L4 12M20 12l-2.5 5a7 7 0 0 1-12-2"/></svg>새로고침</button>
+      </div>
+
+      <section id="stock-cards" class="metric-grid" aria-label="재고 요약"></section>
+      <div id="fault-notice" class="fault-notice" hidden>
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.6 2.4 17.3A2 2 0 0 0 4.1 20h15.8a2 2 0 0 0 1.7-2.7L13.7 3.6a2 2 0 0 0-3.4 0Z"/></svg>
+        <div><strong id="fault-title"></strong><p>정상 재고와 분리하며 재고 원장과 이력에는 계속 보존됩니다.</p></div>
+      </div>
+
+      <section class="table-card" aria-labelledby="inventory-table-title">
+        <div class="section-heading"><div><h2 id="inventory-table-title">유형·사양별 재고</h2><p>SSD·HDD는 사양별 집계 · 사양이 부족하면 ‘사양 미입력’으로 분리</p></div><span id="row-count" class="count-badge"></span></div>
+        <details class="specification-guide">
+          <summary><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg><span>사양 집계 기준 안내</span></summary>
+          <div class="specification-guide-content">
+            <p><strong>SSD·HDD는 용량 + 인터페이스 + 폼팩터가 모두 같으면 같은 사양으로 묶습니다.</strong> Site가 다르면 별도 행으로 표시합니다.</p>
+            <p>SSD 예: <strong>1.92 TB · SAS · 2.5인치</strong><br>HDD 예: <strong>4 TB · SATA · 3.5인치</strong></p>
+            <p>용량은 1 TB = 1000 GB로 비교하므로 1920 GB와 1.92 TB는 같은 용량입니다. 사양이 같아도 SSD와 HDD는 별도 그룹입니다.</p>
+            <p>세 항목 중 하나라도 없거나 폼팩터가 ‘기타’이면 <strong>사양 미입력</strong> 그룹으로 분리합니다. 자산 상세 → 정보 수정에서 입력할 수 있습니다.</p>
+            <p>제조사·모델·P/N·Serial은 현재 집계 기준에 포함하지 않습니다. 같은 그룹이 교체 호환성을 보장하지는 않습니다. SSD·HDD 외 부품은 유형·Site 기준으로 집계합니다.</p>
+          </div>
+        </details>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>자산 유형</th><th>사양</th><th>Site</th><th class="number">정상 재고</th><th class="number">사용 가능</th><th class="number">사용 중</th><th class="number">장애</th><th class="number">폐기</th><th><span class="sr-only">작업</span></th></tr></thead>
+            <tbody id="stock-body"></tbody>
+          </table>
+        </div>
+        <div id="stock-empty" class="empty-state" hidden>
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg>
+          <h3>표시할 등록 자산이 없습니다</h3><p>모바일 앱에서 QR 자산을 등록하면 자동으로 집계됩니다.</p><a class="button primary" href="/mobile">모바일 등록 열기</a>
+        </div>
+      </section>
+    </section>
+
+    <section id="panel-quote" role="tabpanel" aria-labelledby="tab-quote" hidden>
+      <div class="toolbar">
+        <div class="field grow"><label for="quote-search">견적 항목 검색</label><input id="quote-search" type="search" placeholder="부품명 또는 카테고리"></div>
+        <div class="field"><label for="quote-date">견적 기준일</label><input id="quote-date" type="date"></div>
+      </div>
+      <section class="table-card" aria-labelledby="quote-table-title">
+        <div class="section-heading"><div><h2 id="quote-table-title">부품 견적</h2><p>재고 원장과 분리된 견적 전용 데이터입니다.</p></div></div>
+        <form id="quote-add-form" class="quote-add-form">
+          <div class="field grow"><label for="quote-new-name">부품명</label><input id="quote-new-name" required></div>
+          <div class="field"><label for="quote-new-price">단가</label><input id="quote-new-price" inputmode="numeric" placeholder="0"></div>
+          <button class="button primary" type="submit">견적 항목 추가</button>
+        </form>
+        <div class="table-wrap"><table><thead><tr><th>부품명</th><th>카테고리</th><th class="number">단가</th><th><span class="sr-only">작업</span></th></tr></thead><tbody id="quote-body"></tbody></table></div>
+        <div id="quote-empty" class="empty-state" hidden><h3>견적 항목이 없습니다</h3><p>위 입력란에서 견적용 부품을 추가하세요.</p></div>
+      </section>
+    </section>
+
+    <section id="panel-label" role="tabpanel" aria-labelledby="tab-label" hidden>
+      <div class="label-controls">
+        <div class="label-intro">
+          <span class="eyebrow">Formtec QR-3111</span>
+          <h2>QR 라벨 발급·출력</h2>
+          <p>20×20mm, 8열×13행, A4 104칸 규격입니다. 인쇄 설정은 배율 100%와 여백 없음을 사용하세요.</p>
+        </div>
+        <form id="label-issue-form" class="label-issue-form">
+          <div class="field">
+            <label for="label-kind">라벨 종류</label>
+            <select id="label-kind" aria-describedby="label-kind-hint">
+              <option value="asset">일반 자산 (ASSET)</option>
+              <option value="server">서버 (SVR)</option>
+              <option value="network">네트워크 장비 (NET)</option>
+            </select>
+            <small id="label-kind-hint">SVR은 SERVER, NET은 NETWORK 유형으로 자동 지정됩니다.</small>
+          </div>
+          <div class="field">
+            <label for="label-quantity">발급 수량</label>
+            <input id="label-quantity" type="number" inputmode="numeric" min="1" max="500" value="104" required aria-describedby="label-quantity-hint">
+            <small id="label-quantity-hint">버튼을 누르면 선택한 종류의 실제 ID가 즉시 발급됩니다.</small>
+          </div>
+          <div class="field">
+            <label for="label-start-position">첫 장 시작 칸</label>
+            <input id="label-start-position" type="number" inputmode="numeric" min="1" max="104" value="1" required aria-describedby="label-position-hint">
+            <small id="label-position-hint">사용한 라벨을 건너뛰려면 1~104 중 선택하세요.</small>
+          </div>
+          <button id="issue-labels" class="button primary" type="submit">ID 발급 및 라벨 생성</button>
+        </form>
+        <div id="label-result-actions" class="label-result-actions" hidden>
+          <p id="label-status" role="status" aria-live="polite"></p>
+          <button id="print-labels" class="button primary" type="button">인쇄 창 열기</button>
+        </div>
+      </div>
+      <div id="label-preview" class="label-preview" aria-label="A4 QR 라벨 미리보기"></div>
+    </section>
+  </main>
+
+  <dialog id="asset-dialog" aria-labelledby="asset-dialog-title">
+    <div class="dialog-header">
+      <div><span class="eyebrow">Individual assets</span><h2 id="asset-dialog-title">개별 자산</h2></div>
+      <button class="icon-button" type="button" data-dialog-close aria-label="개별 자산 목록 닫기"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div id="asset-list" class="asset-list"></div>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
