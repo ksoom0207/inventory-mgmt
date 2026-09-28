@@ -6,8 +6,9 @@
   <meta name="description" content="개별 자산 원장에서 집계한 전체 인프라 재고 현황">
   <title>InfraStock · 전체 재고 현황</title>
   <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/dashboard.css?v=spec-guide-2">
-  <script src="/dashboard.js?v=ssd-groups-1" defer></script>
+  <link rel="stylesheet" href="/dashboard.css?v=purchase-compare-1">
+  <script src="/dashboard.js?v=purchase-compare-1" defer></script>
+  <script src="/purchase-quotes.js?v=purchase-compare-1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -32,7 +33,7 @@
 
     <div class="tabs" role="tablist" aria-label="재고 화면">
       <button id="tab-stock" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="panel-stock" data-tab="stock">재고 현황</button>
-      <button id="tab-quote" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-quote" data-tab="quote">부품 견적</button>
+      <button id="tab-quote" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-quote" data-tab="quote">구매 견적 비교</button>
       <button id="tab-label" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-label" data-tab="label">QR 라벨</button>
     </div>
 
@@ -76,17 +77,38 @@
 
     <section id="panel-quote" role="tabpanel" aria-labelledby="tab-quote" hidden>
       <div class="toolbar">
-        <div class="field grow"><label for="quote-search">견적 항목 검색</label><input id="quote-search" type="search" placeholder="부품명 또는 카테고리"></div>
-        <div class="field"><label for="quote-date">견적 기준일</label><input id="quote-date" type="date"></div>
+        <div class="field grow"><label for="quote-search">품목 검색</label><input id="quote-search" type="search" placeholder="품목명·P/N·공급사"></div>
+        <div class="field"><label for="quote-date">비교 기준일</label><input id="quote-date" type="date"></div>
       </div>
+      <section class="table-card purchase-card" aria-labelledby="purchase-table-title">
+        <div class="section-heading"><div><h2 id="purchase-table-title">공급사별 구매 견적</h2><p>같은 품목·수량·부가세 기준의 유효 견적만 최저 금액으로 표시합니다. 금액은 원화(KRW)이며 합계는 수량 × 단가 + 배송비입니다.</p></div><span id="offer-count" class="count-badge"></span></div>
+        <form id="purchase-offer-form" class="purchase-offer-form">
+          <div class="field"><label for="offer-item">견적 품목</label><select id="offer-item" required><option value="">품목 선택</option></select></div>
+          <div class="field"><label for="offer-supplier">공급사</label><input id="offer-supplier" required maxlength="120" placeholder="예: 공급사 A"></div>
+          <div class="field"><label for="offer-quantity">수량</label><input id="offer-quantity" type="number" min="1" max="1000000" step="1" value="1" required></div>
+          <div class="field"><label for="offer-unit-price">단가 (원)</label><input id="offer-unit-price" type="number" min="0" step="1" inputmode="numeric" required></div>
+          <div class="field"><label for="offer-shipping">배송비 (원)</label><input id="offer-shipping" type="number" min="0" step="1" inputmode="numeric" value="0" required></div>
+          <div class="field"><label for="offer-tax-basis">부가세 기준</label><select id="offer-tax-basis" required><option value="EXCLUDED">별도</option><option value="INCLUDED">포함</option></select></div>
+          <div class="field"><label for="offer-date">견적일</label><input id="offer-date" type="date" required></div>
+          <div class="field"><label for="offer-valid-until">유효기간 종료일</label><input id="offer-valid-until" type="date"></div>
+          <div class="field"><label for="offer-lead-days">납기 (일)</label><input id="offer-lead-days" type="number" min="0" step="1" inputmode="numeric" placeholder="미정"></div>
+          <div class="field"><label for="offer-ref">공급사 견적번호</label><input id="offer-ref" maxlength="120" placeholder="선택 항목"></div>
+          <button id="offer-save" class="button primary" type="submit">공급사 견적 기록</button>
+        </form>
+        <p id="offer-form-error" class="offer-form-error" role="alert" hidden></p>
+        <div class="table-wrap"><table><thead><tr><th>품목 · P/N</th><th>공급사</th><th class="number">수량</th><th class="number">단가</th><th class="number">배송비</th><th class="number">비교 금액</th><th>부가세</th><th>견적일 · 유효기간</th><th>납기</th><th>상태</th></tr></thead><tbody id="offer-body"></tbody></table></div>
+        <div id="offer-empty" class="empty-state" hidden><h3>공급사 견적이 없습니다</h3><p>아래에서 품목을 만든 뒤 공급사 견적을 기록하세요.</p></div>
+      </section>
       <section class="table-card" aria-labelledby="quote-table-title">
-        <div class="section-heading"><div><h2 id="quote-table-title">부품 견적</h2><p>재고 원장과 분리된 견적 전용 데이터입니다.</p></div></div>
+        <div class="section-heading"><div><h2 id="quote-table-title">견적 품목 · 기준 단가</h2><p>기존 날짜별 단가는 공급사 미지정 참고 가격으로 보관합니다.</p></div></div>
         <form id="quote-add-form" class="quote-add-form">
           <div class="field grow"><label for="quote-new-name">부품명</label><input id="quote-new-name" required></div>
-          <div class="field"><label for="quote-new-price">단가</label><input id="quote-new-price" inputmode="numeric" placeholder="0"></div>
+          <div class="field"><label for="quote-new-category">카테고리</label><input id="quote-new-category" placeholder="예: SSD"></div>
+          <div class="field"><label for="quote-new-part-number">P/N</label><input id="quote-new-part-number" placeholder="선택 항목"></div>
+          <div class="field"><label for="quote-new-price">기준 단가 (원)</label><input id="quote-new-price" type="number" min="0" step="1" inputmode="numeric" placeholder="미입력 가능"></div>
           <button class="button primary" type="submit">견적 항목 추가</button>
         </form>
-        <div class="table-wrap"><table><thead><tr><th>부품명</th><th>카테고리</th><th class="number">단가</th><th><span class="sr-only">작업</span></th></tr></thead><tbody id="quote-body"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>부품명</th><th>카테고리</th><th>P/N</th><th class="number">기준 단가</th><th><span class="sr-only">작업</span></th></tr></thead><tbody id="quote-body"></tbody></table></div>
         <div id="quote-empty" class="empty-state" hidden><h3>견적 항목이 없습니다</h3><p>위 입력란에서 견적용 부품을 추가하세요.</p></div>
       </section>
     </section>
@@ -96,7 +118,7 @@
         <div class="label-intro">
           <span class="eyebrow">Formtec QR-3111</span>
           <h2>QR 라벨 발급·출력</h2>
-          <p>20×20mm, 8열×13행, A4 104칸 규격입니다. 인쇄 설정은 배율 100%와 여백 없음을 사용하세요.</p>
+          <p>20×20mm, 8열×13행, A4 104칸 규격입니다. 인쇄 설정은 배율 100%와 여백 없음을 사용하세요. 첫 장 시작 칸은 용지의 위치만 바꾸며 ID 번호에는 영향을 주지 않습니다.</p>
         </div>
         <form id="label-issue-form" class="label-issue-form">
           <div class="field">
@@ -116,10 +138,30 @@
           <div class="field">
             <label for="label-start-position">첫 장 시작 칸</label>
             <input id="label-start-position" type="number" inputmode="numeric" min="1" max="104" value="1" required aria-describedby="label-position-hint">
-            <small id="label-position-hint">사용한 라벨을 건너뛰려면 1~104 중 선택하세요.</small>
+            <small id="label-position-hint">용지의 시작 위치입니다. ID 번호를 지정하려면 아래 재출력을 사용하세요.</small>
           </div>
           <button id="issue-labels" class="button primary" type="submit">ID 발급 및 라벨 생성</button>
         </form>
+        <div class="label-reprint">
+          <h3>기존 라벨 재출력</h3>
+          <p>이미 발급한 번호를 다시 인쇄합니다. 새 ID는 발급되지 않습니다.</p>
+          <form id="label-reprint-form" class="label-issue-form">
+            <div class="field">
+              <label for="reprint-start-code">시작 ID</label>
+              <input id="reprint-start-code" type="text" required pattern="(ASSET|SVR|SRV|NET)-[0-9]{8}" placeholder="ASSET-00000001" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="reprint-code-hint">
+              <small id="reprint-code-hint">인쇄할 첫 번째 발급 번호를 입력하세요.</small>
+            </div>
+            <div class="field">
+              <label for="reprint-quantity">재출력 수량</label>
+              <input id="reprint-quantity" type="number" inputmode="numeric" min="1" max="500" value="1" required>
+            </div>
+            <div class="field">
+              <label for="reprint-start-position">첫 장 시작 칸</label>
+              <input id="reprint-start-position" type="number" inputmode="numeric" min="1" max="104" value="1" required>
+            </div>
+            <button id="reprint-labels" class="button secondary" type="submit">기존 번호 불러오기</button>
+          </form>
+        </div>
         <div id="label-result-actions" class="label-result-actions" hidden>
           <p id="label-status" role="status" aria-live="polite"></p>
           <button id="print-labels" class="button primary" type="button">인쇄 창 열기</button>

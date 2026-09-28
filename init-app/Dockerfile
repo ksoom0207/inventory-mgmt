@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py index.html dashboard.css dashboard.js mobile.html mobile.css mobile.js manifest.webmanifest sw.js icon-192.svg icon-512.svg ./
+COPY app.py index.html dashboard.css dashboard.js purchase-quotes.js mobile.html mobile.css mobile.js manifest.webmanifest sw.js icon-192.svg icon-512.svg ./
 
 # 재고 DB가 저장될 볼륨 경로
 ENV DB_PATH=/data/inventory.db

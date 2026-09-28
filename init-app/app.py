@@ -14,8 +14,9 @@ from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Literal, Optional
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 import segno
@@ -217,6 +218,7 @@ def init_db():
                 id         TEXT PRIMARY KEY,
                 name       TEXT NOT NULL,
                 category   TEXT NOT NULL DEFAULT '기타',
+                part_number TEXT,
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS quote_prices (
@@ -225,6 +227,22 @@ def init_db():
                 price   INTEGER NOT NULL CHECK (price >= 0),
                 PRIMARY KEY (item_id, date)
             );
+            CREATE TABLE IF NOT EXISTS purchase_offers (
+                id            TEXT PRIMARY KEY,
+                item_id       TEXT NOT NULL REFERENCES quote_items(id),
+                supplier      TEXT NOT NULL,
+                supplier_ref  TEXT,
+                quantity      INTEGER NOT NULL CHECK (quantity > 0),
+                unit_price    INTEGER NOT NULL CHECK (unit_price >= 0),
+                shipping_cost INTEGER NOT NULL DEFAULT 0 CHECK (shipping_cost >= 0),
+                tax_basis     TEXT NOT NULL CHECK (tax_basis IN ('INCLUDED', 'EXCLUDED')),
+                quoted_on     TEXT NOT NULL,
+                valid_until   TEXT,
+                lead_days     INTEGER CHECK (lead_days >= 0),
+                created_at    TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS purchase_offers_item_date
+            ON purchase_offers(item_id, quoted_on DESC);
             CREATE TABLE IF NOT EXISTS app_migrations (
                 name       TEXT PRIMARY KEY,
                 applied_at TEXT NOT NULL
@@ -256,6 +274,11 @@ def init_db():
         ]
         if "memo" not in event_cols:
             conn.execute("ALTER TABLE asset_events ADD COLUMN memo TEXT")
+        quote_item_cols = [
+            row["name"] for row in conn.execute("PRAGMA table_info(quote_items)").fetchall()
+        ]
+        if "part_number" not in quote_item_cols:
+            conn.execute("ALTER TABLE quote_items ADD COLUMN part_number TEXT")
         # 마이그레이션: 기존 단일 단가(price>0)를 날짜별 단가 테이블로 이관
         rows = conn.execute(
             """SELECT id, price FROM parts
@@ -376,11 +399,26 @@ class AssetRegistrationIn(BaseModel):
 class QuoteItemIn(BaseModel):
     name: str = Field(min_length=1)
     category: str = "기타"
+    part_number: Optional[str] = Field(default=None, max_length=240)
 
 
 class QuoteItemPatch(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1)
     category: Optional[str] = Field(default=None, min_length=1)
+    part_number: Optional[str] = Field(default=None, max_length=240)
+
+
+class PurchaseOfferIn(BaseModel):
+    item_id: str
+    supplier: str = Field(min_length=1, max_length=120)
+    supplier_ref: Optional[str] = Field(default=None, max_length=120)
+    quantity: int = Field(gt=0, le=1000000)
+    unit_price: int = Field(ge=0)
+    shipping_cost: int = Field(default=0, ge=0)
+    tax_basis: Literal["INCLUDED", "EXCLUDED"]
+    quoted_on: date
+    valid_until: Optional[date] = None
+    lead_days: Optional[int] = Field(default=None, ge=0)
 
 
 class AssetMovementIn(BaseModel):
@@ -507,6 +545,7 @@ def list_quotes():
             "id": item["id"],
             "name": item["name"],
             "category": item["category"],
+            "part_number": item["part_number"],
             "prices": prices_by_item.get(item["id"], []),
         }
         for item in items
@@ -515,12 +554,15 @@ def list_quotes():
 
 @app.post("/api/quotes", status_code=201)
 def create_quote_item(item: QuoteItemIn, _actor: str = Depends(require_admin)):
-    item_id = "q" + str(int(time.time() * 1000))
+    name = item.name.strip()
+    if not name:
+        raise HTTPException(422, "quote item name is required")
+    item_id = "q" + uuid4().hex
     with get_db() as conn:
         conn.execute(
-            """INSERT INTO quote_items (id, name, category, created_at)
-               VALUES (?, ?, ?, ?)""",
-            (item_id, item.name, item.category, datetime.now(timezone.utc).isoformat()),
+            """INSERT INTO quote_items (id, name, category, part_number, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (item_id, name, item.category.strip() or "기타", (item.part_number or "").strip() or None, datetime.now(timezone.utc).isoformat()),
         )
     return {"id": item_id}
 
@@ -532,6 +574,11 @@ def update_quote_item(
     _actor: str = Depends(require_admin),
 ):
     fields = {key: value for key, value in patch.model_dump().items() if value is not None}
+    for key in ("name", "category"):
+        if key in fields and not fields[key].strip():
+            raise HTTPException(422, f"{key} is required")
+    if "part_number" in fields:
+        fields["part_number"] = fields["part_number"].strip() or None
     if not fields:
         return {"ok": True}
     sets = ", ".join(f"{key} = ?" for key in fields)
@@ -548,6 +595,8 @@ def update_quote_item(
 @app.delete("/api/quotes/{item_id}")
 def delete_quote_item(item_id: str, _actor: str = Depends(require_admin)):
     with get_db() as conn:
+        if conn.execute("SELECT 1 FROM purchase_offers WHERE item_id = ? LIMIT 1", (item_id,)).fetchone():
+            raise HTTPException(409, "supplier offers exist for this item")
         cursor = conn.execute("DELETE FROM quote_items WHERE id = ?", (item_id,))
         if cursor.rowcount == 0:
             raise HTTPException(404, "quote item not found")
@@ -572,6 +621,61 @@ def upsert_quote_price(
             (item_id, price.date, price.price),
         )
     return {"ok": True}
+
+
+@app.get("/api/purchase-offers")
+def list_purchase_offers(as_of: Optional[date] = None):
+    reference_date = as_of or date.today()
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT o.*, i.name AS item_name, i.category, i.part_number
+               FROM purchase_offers AS o JOIN quote_items AS i ON i.id = o.item_id
+               ORDER BY i.name, o.quantity, o.tax_basis, o.quoted_on DESC, o.id"""
+        ).fetchall()
+    offers = []
+    for row in rows:
+        offer = dict(row)
+        offer["total_price"] = offer["quantity"] * offer["unit_price"] + offer["shipping_cost"]
+        offer["status"] = (
+            "UPCOMING" if offer["quoted_on"] > reference_date.isoformat()
+            else "EXPIRED" if offer["valid_until"] and offer["valid_until"] < reference_date.isoformat()
+            else "ACTIVE"
+        )
+        offers.append(offer)
+    cheapest = {}
+    for offer in offers:
+        if offer["status"] != "ACTIVE":
+            continue
+        key = (offer["item_id"], offer["quantity"], offer["tax_basis"])
+        cheapest[key] = min(cheapest.get(key, offer["total_price"]), offer["total_price"])
+    for offer in offers:
+        key = (offer["item_id"], offer["quantity"], offer["tax_basis"])
+        offer["lowest"] = offer["status"] == "ACTIVE" and offer["total_price"] == cheapest.get(key)
+    return offers
+
+
+@app.post("/api/purchase-offers", status_code=201)
+def create_purchase_offer(offer: PurchaseOfferIn, _actor: str = Depends(require_admin)):
+    supplier = offer.supplier.strip()
+    if not supplier:
+        raise HTTPException(422, "supplier is required")
+    if offer.valid_until and offer.valid_until < offer.quoted_on:
+        raise HTTPException(422, "valid_until must not precede quoted_on")
+    offer_id = "po" + uuid4().hex
+    with get_db() as conn:
+        if conn.execute("SELECT 1 FROM quote_items WHERE id = ?", (offer.item_id,)).fetchone() is None:
+            raise HTTPException(404, "quote item not found")
+        conn.execute(
+            """INSERT INTO purchase_offers
+               (id, item_id, supplier, supplier_ref, quantity, unit_price, shipping_cost,
+                tax_basis, quoted_on, valid_until, lead_days, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (offer_id, offer.item_id, supplier, (offer.supplier_ref or "").strip() or None,
+             offer.quantity, offer.unit_price, offer.shipping_cost, offer.tax_basis,
+             offer.quoted_on.isoformat(), offer.valid_until.isoformat() if offer.valid_until else None,
+             offer.lead_days, datetime.now(timezone.utc).isoformat()),
+        )
+    return {"id": offer_id}
 
 
 @app.post("/api/asset-labels", status_code=201)
@@ -650,6 +754,31 @@ def issue_equipment_labels(request: AssetLabelIssueIn, sequence_table: str, pref
         "asset_codes": asset_codes,
         "registration_status": "UNASSIGNED",
     }
+
+
+@app.get("/api/asset-labels/reprint")
+def reprint_asset_labels(
+    start_code: str = Query(pattern=r"^(?:ASSET|SVR|SRV|NET)-\d{8}$"),
+    quantity: int = Query(ge=1, le=500),
+    _actor: str = Depends(require_admin),
+):
+    prefix, first_text = start_code.split("-", 1)
+    first = int(first_text)
+    if first + quantity - 1 > 99999999:
+        raise HTTPException(422, "label number exceeds eight digits")
+    asset_codes = [f"{prefix}-{number:08d}" for number in range(first, first + quantity)]
+    with get_db() as conn:
+        placeholders = ",".join("?" for _ in asset_codes)
+        existing = {
+            row["asset_code"] for row in conn.execute(
+                f"SELECT asset_code FROM asset_labels WHERE asset_code IN ({placeholders})",
+                asset_codes,
+            )
+        }
+    missing = next((code for code in asset_codes if code not in existing), None)
+    if missing:
+        raise HTTPException(404, f"issued label not found: {missing}")
+    return {"asset_codes": asset_codes}
 
 
 @app.get("/api/asset-labels/{asset_code}/qr.svg")
@@ -1304,6 +1433,15 @@ def dashboard_styles():
 def dashboard_script():
     return FileResponse(
         os.path.join(BASE_DIR, "dashboard.js"),
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/purchase-quotes.js")
+def purchase_quotes_script():
+    return FileResponse(
+        os.path.join(BASE_DIR, "purchase-quotes.js"),
         media_type="application/javascript",
         headers={"Cache-Control": "no-cache"},
     )

@@ -5,6 +5,7 @@ FastAPI 하나가 재고 현황 앱(`index.html`)과 재고 API를 함께 서빙
 
 ## 파일 구성
 - `index.html` — 재고 현황 웹 앱 (서버 API 연동)
+- `dashboard.js`, `purchase-quotes.js` — 재고 화면과 공급사 견적 비교 화면
 - `mobile.html`, `mobile.css`, `mobile.js` — 스마트폰용 QR 자산 등록 PWA
 - `manifest.webmanifest`, `sw.js` — PWA 설치 정보와 앱 셸 캐시
 - `app.py` — FastAPI 백엔드 (부품/재고 CRUD + SQLite)
@@ -94,6 +95,8 @@ docker run -d --name idc-inventory -p 8080:80 -v inventory-data:/data idc-invent
 - NET ID는 `NET-00000001`부터 독립 발급하며 등록 시 `NETWORK` 유형을 자동 지정합니다. 기존 SRV 라벨도 계속 조회·등록·장착할 수 있습니다.
 - 폼텍 QR-3111 공식 규격인 20×20mm, 8열×13행, 104칸에 맞춥니다.
 - 일부를 사용한 용지는 `첫 장 시작 칸`으로 빈칸을 건너뜁니다.
+- `첫 장 시작 칸`은 용지 위치만 정하고 ID 순번에는 영향을 주지 않습니다. `ID 발급 및 라벨 생성`을 누를 때마다 새 번호가 발급됩니다.
+- 이전 번호를 다시 인쇄하려면 `기존 라벨 재출력`에서 시작 ID·수량·첫 장 시작 칸을 지정하세요. 이미 발급된 연속 번호만 인쇄하며 새 ID를 발급하지 않습니다. `GET /api/asset-labels/reprint?start_code=ASSET-00000001&quantity=1`로 확인합니다.
 - 브라우저 인쇄 설정에서 A4, 배율 100%, 여백 없음, 머리글·바닥글 표시 안 함을 선택합니다.
 
 ### 전체 재고와 견적 데이터
@@ -101,6 +104,9 @@ docker run -d --name idc-inventory -p 8080:80 -v inventory-data:/data idc-invent
 - 전체 재고 화면은 개별 `assets` 원장만 집계하며 수량 직접 입력 기능을 제공하지 않습니다.
 - 기존 `parts`와 `records` 데이터는 계속 보관하지만 전체 재고 화면에서는 조회하지 않습니다.
 - 견적은 별도 `quote_items`와 `quote_prices`로 최초 1회 복사되며 이후 재고 데이터와 독립적으로 관리됩니다.
+- `구매 견적 비교` 탭의 기존 날짜별 단가는 공급사 미지정 기준 단가로 유지합니다. 공급사별 구매 견적은 별도 기록으로 저장하며, 품목 P/N, 공급사, 수량, 원화 단가, 배송비, 부가세 포함·별도 기준, 견적일, 유효기간, 납기를 입력합니다.
+- 비교 금액은 `수량 × 단가 + 배송비`입니다. 유효한 견적 중 같은 품목·수량·부가세 기준끼리만 최저 금액을 표시합니다. 부가세 환산은 하지 않으며, 유효기간이 지난 견적과 견적일이 아직 오지 않은 견적은 최저 금액 판단에서 제외합니다.
+- 견적 품목과 기준 단가, 공급사 견적은 각각 `GET /api/quotes`, `GET /api/purchase-offers?as_of=YYYY-MM-DD`에서 조회합니다. 공급사 견적은 `POST /api/purchase-offers`로 추가합니다. 기존 품목·단가 자료를 공급사 견적으로 자동 변환하지 않습니다.
 
 ## 테스트
 

@@ -1,5 +1,6 @@
 import importlib
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -170,6 +171,27 @@ def test_legacy_srv_label_stays_usable(client):
     assert issue_first_server_label(client).json()["asset_codes"] == ["SVR-00000002"]
     register_first_asset(client)
     assert client.post("/api/assets/ASSET-00000001/assignments", json={"target_asset_code": "SRV-00000001"}).status_code == 201
+
+
+@pytest.mark.parametrize("issue_endpoint,prefix", [
+    ("asset-labels", "ASSET"), ("server-labels", "SVR"), ("network-labels", "NET"),
+])
+def test_reprint_issued_labels_without_advancing_sequence(client, issue_endpoint, prefix):
+    issued = client.post(f"/api/{issue_endpoint}", json={"quantity": 3}).json()["asset_codes"]
+    response = client.get("/api/asset-labels/reprint", params={"start_code": issued[0], "quantity": 2})
+    assert response.status_code == 200
+    assert response.json() == {"asset_codes": issued[:2]}
+    assert client.get(f"/api/asset-labels/{issued[0]}/qr.svg").status_code == 200
+    assert client.post(f"/api/{issue_endpoint}", json={"quantity": 1}).json()["asset_codes"] == [f"{prefix}-00000004"]
+
+
+def test_reprint_rejects_unissued_or_invalid_codes(client):
+    issued = client.post("/api/asset-labels", json={"quantity": 2}).json()["asset_codes"]
+    assert client.get("/api/asset-labels/reprint", params={"start_code": issued[1], "quantity": 2}).status_code == 404
+    assert client.get("/api/asset-labels/reprint", params={"start_code": "ASSET-00000003", "quantity": 1}).status_code == 404
+    assert client.get("/api/asset-labels/reprint", params={"start_code": "OTHER-00000001", "quantity": 1}).status_code == 422
+    assert client.get("/api/asset-labels/reprint", params={"start_code": issued[0], "quantity": 501}).status_code == 422
+    assert client.post("/api/asset-labels", json={"quantity": 1}).json()["asset_codes"] == ["ASSET-00000003"]
 
 
 def issue_first_server_label(client):
@@ -677,3 +699,86 @@ def test_health_check_reports_database_ready(client):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "database": "ready"}
+
+
+def test_purchase_offer_comparison_preserves_reference_prices(client):
+    created = client.post("/api/quotes", json={"name": "SSD 1.92TB", "category": "SSD", "part_number": " PN-001 "})
+    assert created.status_code == 201
+    item_id = created.json()["id"]
+    assert client.put(f"/api/quotes/{item_id}/prices", json={"date": "2026-09-01", "price": 150000}).status_code == 200
+    offers = [
+        {"supplier": "공급사 A", "unit_price": 120000, "shipping_cost": 10000, "tax_basis": "EXCLUDED", "valid_until": "2026-10-31"},
+        {"supplier": "공급사 B", "unit_price": 123000, "shipping_cost": 0, "tax_basis": "EXCLUDED", "valid_until": "2026-10-31"},
+        {"supplier": "공급사 C", "unit_price": 100000, "shipping_cost": 0, "tax_basis": "EXCLUDED", "valid_until": "2026-09-10"},
+        {"supplier": "공급사 D", "unit_price": 110000, "shipping_cost": 0, "tax_basis": "INCLUDED", "valid_until": "2026-10-31"},
+    ]
+    for offer in offers:
+        response = client.post("/api/purchase-offers", json={
+            "item_id": item_id, "quantity": 2, "quoted_on": "2026-09-01", "lead_days": 5,
+            **offer,
+        })
+        assert response.status_code == 201
+    items = client.get("/api/quotes").json()
+    item = next(item for item in items if item["id"] == item_id)
+    assert item["part_number"] == "PN-001"
+    assert item["prices"] == [{"date": "2026-09-01", "price": 150000}]
+    compared = {offer["supplier"]: offer for offer in client.get("/api/purchase-offers", params={"as_of": "2026-09-28"}).json()}
+    assert compared["공급사 A"]["total_price"] == 250000
+    assert compared["공급사 B"]["total_price"] == 246000
+    assert compared["공급사 B"]["lowest"] is True
+    assert compared["공급사 A"]["lowest"] is False
+    assert compared["공급사 C"]["status"] == "EXPIRED"
+    assert compared["공급사 C"]["lowest"] is False
+    assert compared["공급사 D"]["lowest"] is True  # VAT basis differs.
+    assert client.get("/api/purchase-offers", params={"as_of": "2026-08-31"}).json()[0]["status"] == "UPCOMING"
+    assert client.delete(f"/api/quotes/{item_id}").status_code == 409
+    sys.modules["app"].init_db()
+    assert len(client.get("/api/purchase-offers").json()) == 4
+
+
+def test_purchase_offer_rejects_invalid_dates_and_amounts(client):
+    item_id = client.post("/api/quotes", json={"name": "NIC"}).json()["id"]
+    valid = {"item_id": item_id, "supplier": "Vendor", "quantity": 2, "unit_price": 0,
+             "tax_basis": "EXCLUDED", "quoted_on": "2026-09-28"}
+    assert client.post("/api/purchase-offers", json=valid).status_code == 201
+    invalid = [
+        {"quantity": 0}, {"unit_price": -1}, {"shipping_cost": -1},
+        {"tax_basis": "UNKNOWN"}, {"supplier": "   "},
+        {"valid_until": "2026-09-27"}, {"lead_days": -1},
+    ]
+    for changed in invalid:
+        assert client.post("/api/purchase-offers", json={**valid, **changed}).status_code == 422
+    assert client.post("/api/purchase-offers", json={**valid, "item_id": "missing"}).status_code == 404
+    assert client.get("/api/purchase-offers", params={"as_of": "not-a-date"}).status_code == 422
+
+
+def test_existing_quote_catalog_migrates_without_losing_prices(client, tmp_path, monkeypatch):
+    legacy_path = tmp_path / "legacy.db"
+    with sqlite3.connect(legacy_path) as conn:
+        conn.execute("CREATE TABLE quote_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, created_at TEXT NOT NULL)")
+        conn.execute("CREATE TABLE quote_prices (item_id TEXT NOT NULL, date TEXT NOT NULL, price INTEGER NOT NULL, PRIMARY KEY (item_id, date))")
+        conn.execute("INSERT INTO quote_items VALUES ('old-1', '기존 SSD', '스토리지', '2026-01-01')")
+        conn.execute("INSERT INTO quote_prices VALUES ('old-1', '2026-01-01', 42000)")
+    module = sys.modules["app"]
+    monkeypatch.setattr(module, "DB_PATH", str(legacy_path))
+    module.init_db()
+    item = next(item for item in client.get("/api/quotes").json() if item["id"] == "old-1")
+    assert item["part_number"] is None
+    assert item["prices"] == [{"date": "2026-01-01", "price": 42000}]
+    response = client.post("/api/purchase-offers", json={
+        "item_id": "old-1", "supplier": "구매처", "quantity": 1, "unit_price": 40000,
+        "tax_basis": "EXCLUDED", "quoted_on": "2026-09-28",
+    })
+    assert response.status_code == 201
+
+
+def test_purchase_offer_creation_requires_admin(client, monkeypatch):
+    module = sys.modules["app"]
+    monkeypatch.setattr(module, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(module, "ADMIN_EMAILS", {"admin@example.com"})
+    monkeypatch.setattr(module, "OPERATOR_EMAILS", {"operator@example.com"})
+    payload = {"item_id": "missing", "supplier": "구매처", "quantity": 1,
+               "unit_price": 40000, "tax_basis": "EXCLUDED", "quoted_on": "2026-09-28"}
+    assert client.post("/api/purchase-offers", json=payload).status_code == 401
+    assert client.post("/api/purchase-offers", json=payload,
+                       headers={"Cf-Access-Authenticated-User-Email": "operator@example.com"}).status_code == 403
