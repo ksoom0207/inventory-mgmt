@@ -6,8 +6,8 @@
   <meta name="description" content="개별 자산 원장에서 집계한 전체 인프라 재고 현황">
   <title>InfraStock · 전체 재고 현황</title>
   <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/dashboard.css?v=purchase-compare-1">
-  <script src="/dashboard.js?v=purchase-compare-1" defer></script>
+  <link rel="stylesheet" href="/dashboard.css?v=labels-10mm-1">
+  <script src="/dashboard.js?v=labels-10mm-1" defer></script>
   <script src="/purchase-quotes.js?v=purchase-compare-1" defer></script>
 </head>
 <body>
@@ -118,7 +118,7 @@
         <div class="label-intro">
           <span class="eyebrow">Formtec QR-3111</span>
           <h2>QR 라벨 발급·출력</h2>
-          <p>20×20mm, 8열×13행, A4 104칸 규격입니다. 인쇄 설정은 배율 100%와 여백 없음을 사용하세요. 첫 장 시작 칸은 용지의 위치만 바꾸며 ID 번호에는 영향을 주지 않습니다.</p>
+          <p>20×20mm 칸마다 10×10mm 라벨 4개를 2×2로 배치합니다. A4 104칸에 최대 416개를 출력하며, 각 칸 안에서는 왼쪽 위 → 오른쪽 위 → 왼쪽 아래 → 오른쪽 아래 순서입니다. 출력 후 10mm 단위로 직접 재단하세요. 인쇄 설정은 배율 100%와 여백 없음을 사용하세요. 첫 장 시작 칸은 용지의 위치만 바꾸며 ID 번호에는 영향을 주지 않습니다.</p>
         </div>
         <form id="label-issue-form" class="label-issue-form">
           <div class="field">
@@ -136,9 +136,9 @@
             <small id="label-quantity-hint">버튼을 누르면 선택한 종류의 실제 ID가 즉시 발급됩니다.</small>
           </div>
           <div class="field">
-            <label for="label-start-position">첫 장 시작 칸</label>
+            <label for="label-start-position">첫 장 시작 칸 (20mm 기준)</label>
             <input id="label-start-position" type="number" inputmode="numeric" min="1" max="104" value="1" required aria-describedby="label-position-hint">
-            <small id="label-position-hint">용지의 시작 위치입니다. ID 번호를 지정하려면 아래 재출력을 사용하세요.</small>
+            <small id="label-position-hint">20×20mm 칸 기준 1~104입니다. 선택한 칸의 왼쪽 위부터 출력합니다.</small>
           </div>
           <button id="issue-labels" class="button primary" type="submit">ID 발급 및 라벨 생성</button>
         </form>
@@ -156,7 +156,7 @@
               <input id="reprint-quantity" type="number" inputmode="numeric" min="1" max="500" value="1" required>
             </div>
             <div class="field">
-              <label for="reprint-start-position">첫 장 시작 칸</label>
+              <label for="reprint-start-position">첫 장 시작 칸 (20mm 기준)</label>
               <input id="reprint-start-position" type="number" inputmode="numeric" min="1" max="104" value="1" required>
             </div>
             <button id="reprint-labels" class="button secondary" type="submit">기존 번호 불러오기</button>
