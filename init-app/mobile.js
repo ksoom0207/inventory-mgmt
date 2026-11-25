@@ -7,6 +7,7 @@ const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => 
 let currentAsset = null;
 let cameraStream = null;
 let scanTimer = null;
+let sites = [];
 
 const $ = (selector) => document.querySelector(selector);
 const screens = [...document.querySelectorAll(".screen")];
@@ -44,6 +45,21 @@ async function request(path, options = {}) {
   return data;
 }
 
+function siteLabel(code) {
+  const site = sites.find((item) => item.code === code);
+  return site ? `${site.code} · ${site.name}` : code;
+}
+
+async function loadSites() {
+  sites = await request("/sites");
+  for (const id of ["register-site-options", "move-site-options", "remove-site-options"]) {
+    const container = document.getElementById(id);
+    const selected = container.querySelector('input[name="site_type"]:checked')?.value;
+    container.innerHTML = sites.map((site) => `
+      <label class="choice-card"><input type="radio" name="site_type" value="${escapeHtml(site.code)}" ${site.code === selected ? "checked" : ""}><span><strong>${escapeHtml(site.code)}</strong><small>${escapeHtml(site.name)}</small></span></label>`).join("");
+  }
+}
+
 async function lookupAsset(rawCode) {
   const code = normalizeAssetCode(rawCode);
   if (!ASSET_CODE_PATTERN.test(code)) {
@@ -78,6 +94,7 @@ function showRegistration(asset) {
   $("#server-registration-note").textContent = asset.asset_code.startsWith("NET-") ? "NET 라벨은 NETWORK로 자동 등록됩니다." : "SVR 라벨은 SERVER로 자동 등록됩니다.";
   clearRegistrationErrors();
   showScreen("register");
+  loadSites().catch(() => { $("#site-type-error").textContent = "Site 목록을 불러오지 못했습니다. 연결을 확인하고 다시 열어주세요."; });
   announce(`${asset.asset_code}, 미등록 라벨입니다.`);
 }
 
@@ -167,7 +184,7 @@ function showDetail(asset) {
   $("#detail-code").textContent = asset.asset_code;
   $("#detail-type").textContent = asset.asset_type;
   $("#detail-status").textContent = STATUS_LABELS[asset.status] || asset.status;
-  $("#detail-site").textContent = asset.site_type;
+  $("#detail-site").textContent = siteLabel(asset.site_type);
   $("#detail-location").textContent = asset.detailed_location || "미지정";
   $("#detail-serial").textContent = asset.serial_number || "미입력";
   $("#detail-part-number").textContent = asset.part_number || "미입력";
@@ -189,9 +206,9 @@ function showComplete(asset) {
   $("#complete-summary").innerHTML = [
     ["자산 ID", asset.asset_code],
     ["자산 유형", asset.asset_type],
-    ["현재 Site", asset.site_type],
+    ["현재 Site", siteLabel(asset.site_type)],
     ["상태", STATUS_LABELS[asset.status] || asset.status],
-  ].map(([term, value]) => `<div><dt>${term}</dt><dd>${value}</dd></div>`).join("");
+  ].map(([term, value]) => `<div><dt>${term}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
   saveRecent(asset);
   showScreen("complete");
   announce(`${asset.asset_code} 등록이 완료되었습니다.`);
@@ -232,11 +249,28 @@ function renderRecent() {
   $("#clear-recent").hidden = recent.length === 0;
   $("#recent-list").innerHTML = recent.length
     ? recent.map((asset) => `
-      <button class="recent-item" type="button" data-asset-code="${asset.asset_code}">
-        <span><strong>${asset.asset_code}</strong><small>${asset.asset_type} · ${asset.site_type}</small></span>
+      <button class="recent-item" type="button" data-asset-code="${escapeHtml(asset.asset_code)}">
+        <span><strong>${escapeHtml(asset.asset_code)}</strong><small>${escapeHtml(asset.asset_type)} · ${escapeHtml(siteLabel(asset.site_type))}</small></span>
         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
       </button>`).join("")
     : `<p class="empty-recent">아직 등록 작업이 없습니다.</p>`;
+}
+
+async function configureScannerTrack(track) {
+  const capabilities = track.getCapabilities?.() || {};
+  // Apply independently: a rejected focus request must not discard working zoom.
+  if (capabilities.zoom && track.applyConstraints) {
+    const { min, max, step } = capabilities.zoom;
+    let zoom = Math.min(max, Math.max(min, 1.2));
+    if (step > 0) zoom = Math.min(max, Math.max(min, min + Math.round((zoom - min) / step) * step));
+    try { await track.applyConstraints({ advanced: [{ zoom: Number(zoom.toFixed(4)) }] }); }
+    catch { /* Keep scanning with the camera's available zoom. */ }
+  }
+  if (capabilities.focusMode?.includes("continuous") && track.applyConstraints) {
+    try { await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }); }
+    catch { /* The camera can still scan with its default focus mode. */ }
+  }
+  return track.getSettings?.().zoom;
 }
 
 async function startScanner() {
@@ -260,15 +294,17 @@ async function startScanner() {
       return;
     }
     cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" } }, audio: false,
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false,
     });
     const video = $("#camera-preview");
     video.srcObject = cameraStream;
     await video.play();
+    const zoom = await configureScannerTrack(cameraStream.getVideoTracks()[0]);
     $("#camera-placeholder").hidden = true;
-    $("#scanner-status").textContent = "QR 코드를 사각형 안에 맞춰주세요.";
+    $("#scanner-status").textContent = `${Number.isFinite(zoom) ? `카메라 배율 ${zoom.toFixed(1)}배. ` : "이 브라우저에서는 배율을 확인·조절할 수 없습니다. "}QR이 선명해지도록 거리를 조절해주세요.`;
     detectQr(new BarcodeDetector({ formats: ["qr_code"] }));
   } catch (error) {
+    stopScanner();
     showScannerRecovery(error.name === "NotAllowedError"
       ? "카메라 권한이 거부되었습니다. 브라우저 설정에서 권한을 허용해주세요."
       : "카메라를 시작하지 못했습니다.");
@@ -324,9 +360,10 @@ function backToDetail() { showDetail(currentAsset); }
 
 function openMove() {
   $("#move-form").reset();
-  $("#move-current").textContent = `현재: ${currentAsset.site_type}${currentAsset.detailed_location ? ` / ${currentAsset.detailed_location}` : ""}`;
+  $("#move-current").textContent = `현재: ${siteLabel(currentAsset.site_type)}${currentAsset.detailed_location ? ` / ${currentAsset.detailed_location}` : ""}`;
   $("#move-site-error").textContent = $("#move-error").textContent = "";
   showScreen("move");
+  loadSites().catch(() => { $("#move-site-error").textContent = "Site 목록을 불러오지 못했습니다. 다시 열어주세요."; });
 }
 
 function openStatus() {
@@ -337,7 +374,7 @@ function openStatus() {
 }
 
 function openInstall() { $("#install-form").reset(); $("#install-error").textContent = ""; showScreen("install"); }
-function openRemove() { $("#remove-form").reset(); $("#remove-site-error").textContent = $("#remove-error").textContent = ""; showScreen("remove"); }
+function openRemove() { $("#remove-form").reset(); $("#remove-site-error").textContent = $("#remove-error").textContent = ""; showScreen("remove"); loadSites().catch(() => { $("#remove-site-error").textContent = "Site 목록을 불러오지 못했습니다. 다시 열어주세요."; }); }
 
 async function openHistory() {
   showScreen("history");
@@ -348,7 +385,7 @@ async function openHistory() {
       const isLocation = ["MOVE", "INSTALL", "REMOVE"].includes(item.action);
       const title = { MOVE: "위치 이동", INSTALL: "서버 장착", REMOVE: "서버 탈착" }[item.action] || "상태 변경";
       const detail = isLocation
-        ? `${item.from_site_type}${item.from_detailed_location ? ` / ${item.from_detailed_location}` : ""} → ${item.to_site_type}${item.to_detailed_location ? ` / ${item.to_detailed_location}` : ""}`
+        ? `${siteLabel(item.from_site_type)}${item.from_detailed_location ? ` / ${item.from_detailed_location}` : ""} → ${siteLabel(item.to_site_type)}${item.to_detailed_location ? ` / ${item.to_detailed_location}` : ""}`
         : `${STATUS_LABELS[item.before_status] || item.before_status} → ${STATUS_LABELS[item.after_status] || item.after_status}`;
       return `<article class="history-item"><header><strong>${title}</strong><time datetime="${escapeHtml(item.created_at)}">${new Date(item.created_at).toLocaleString("ko-KR")}</time></header><p>${escapeHtml(detail)}</p><p>작업자: ${escapeHtml(item.actor)}</p>${item.memo ? `<p>메모: ${escapeHtml(item.memo)}</p>` : ""}</article>`;
     }).join("") : '<p class="history-empty">아직 이동 또는 상태 변경 이력이 없습니다.</p>';
@@ -497,6 +534,7 @@ $("#remove-form").addEventListener("submit", async (event) => {
 
 renderAssetTypes();
 renderRecent();
+loadSites().then(renderRecent).catch(() => {});
 
 const deepLinkMatch = location.pathname.match(/^\/a\/((?:ASSET|SVR|SRV|NET)-\d{8})\/?$/i);
 if (deepLinkMatch) lookupAsset(deepLinkMatch[1]);

@@ -40,7 +40,7 @@ Serial Number를 포함한 필수 상세정보가 실제 자산과 대조되어 
 _Avoid_: 완성 자산
 
 **Site**:
-자산이 속한 최상위 장소 구분으로, 현재는 IDC 또는 Office 중 하나이다.
+자산이 속한 최상위 장소 구분. IDC·Office 외에 별도의 데이터센터나 창고도 Site가 될 수 있으며, 자산 이력이 연결된 Site는 과거 위치를 설명하는 참조로 남는다.
 _Avoid_: 위치, Location
 
 **상세 위치 (Detailed Location)**:

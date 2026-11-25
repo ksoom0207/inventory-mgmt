@@ -1,0 +1,14 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const src=fs.readFileSync(require('node:path').join(__dirname,'../mobile.js'),'utf8');
+const elements=new Map();const calls=[];
+const track={getCapabilities:()=>({zoom:{min:1,max:5,step:0.1},focusMode:['continuous']}),applyConstraints:async c=>calls.push(c),getSettings:()=>({zoom:1.2})};
+const ctx={cameraStream:null,$:s=>{if(!elements.has(s))elements.set(s,{play:async()=>{}});return elements.get(s)},showScreen(){},showScannerRecovery(m){throw Error(m)},detectQr(){},navigator:{mediaDevices:{getUserMedia:async()=>({getVideoTracks:()=>[track],getTracks:()=>[track]})}},window:{BarcodeDetector:true},BarcodeDetector:class{static async getSupportedFormats(){return ['qr_code']}}};
+vm.createContext(ctx);const a=src.indexOf('async function configureScannerTrack');vm.runInContext(src.slice(a>=0?a:src.indexOf('async function startScanner()'),src.indexOf('\nfunction detectQr')),ctx);
+(async()=>{await ctx.startScanner();assert(calls.some(c=>c.advanced?.some(v=>v.zoom===1.2)),'missing 1.2 zoom request');assert(calls.some(c=>c.advanced?.some(v=>v.focusMode==='continuous')),'missing continuous autofocus');console.log('PASS scanner requests 1.2 zoom and continuous focus');
+await ctx.configureScannerTrack({});
+console.log('PASS unsupported camera keeps scanning');
+const constrained=[];
+await ctx.configureScannerTrack({getCapabilities:()=>({zoom:{min:2,max:4,step:0.5},focusMode:['continuous']}),applyConstraints:async c=>{constrained.push(c);if(c.advanced[0].zoom)throw Error('unsupported');}});
+assert.equal(constrained[0].advanced[0].zoom,2);
+assert.equal(constrained[1].advanced[0].focusMode,'continuous');
+console.log('PASS zoom range clamped and rejection does not block focus');})().catch(e=>{console.error(e.message);process.exitCode=1});

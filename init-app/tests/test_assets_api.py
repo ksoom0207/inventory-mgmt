@@ -1,10 +1,12 @@
 import importlib
 import os
+import re
 import sqlite3
 import sys
 from pathlib import Path
 
 import pytest
+import segno
 from fastapi.testclient import TestClient
 
 
@@ -26,6 +28,60 @@ def issue_first_label(client):
     response = client.post("/api/asset-labels", json={"quantity": 1})
     assert response.status_code == 201
     return response
+
+
+@pytest.mark.parametrize("asset_type,prefix", [("SSD", "ASSET"), ("SERVER", "SVR"), ("NETWORK", "NET")])
+def test_create_asset_before_printing_its_qr(client, asset_type, prefix):
+    created = client.post("/api/assets", json={
+        "asset_type": asset_type, "site_type": "IDC", "serial_number": " SN-001 ",
+        "manufacturer": "Dell", "model": "R750", "part_number": "PN-1",
+    })
+    assert created.status_code == 201
+    code = f"{prefix}-00000001"
+    assert created.json()["asset_code"] == code
+    assert created.json()["registration_status"] == "REGISTERED"
+    assert created.json()["serial_number"] == "SN-001"
+    assert client.get(f"/api/assets/{code}").json()["model"] == "R750"
+    assert client.get("/api/inventory/summary").json()["totals"]["registered"] == 1
+    with sys.modules["app"].get_db() as conn:
+        assert conn.execute("SELECT action FROM asset_events WHERE asset_code = ?", (code,)).fetchone()[0] == "REGISTER"
+    qr = client.get(f"/api/asset-labels/{code}/qr.svg")
+    assert qr.status_code == 200
+    assert qr.headers["x-qr-content"].endswith(f"/a/{code}")
+    assert client.get("/api/asset-labels/reprint", params={"start_code": code, "quantity": 1}).json()["asset_codes"] == [code]
+    assert client.post("/api/assets", json={"asset_type": asset_type, "site_type": "IDC"}).json()["asset_code"] == f"{prefix}-00000002"
+
+
+def test_create_asset_rejects_unknown_site_without_consuming_id(client):
+    rejected = client.post("/api/assets", json={"asset_type": "SSD", "site_type": "MISSING"})
+    assert rejected.status_code == 422
+    assert client.post("/api/assets", json={"asset_type": "SSD", "site_type": "IDC"}).json()["asset_code"] == "ASSET-00000001"
+
+
+@pytest.mark.parametrize("asset_type,prefix", [("SSD", "ASSET"), ("SERVER", "SVR"), ("NETWORK", "NET")])
+def test_register_multiple_assets_with_one_qr_each(client, asset_type, prefix):
+    created = client.post("/api/assets", json={
+        "asset_type": asset_type, "site_type": "IDC", "quantity": 3,
+        "manufacturer": "Dell", "model": "R750", "part_number": "PN-1",
+    })
+    assert created.status_code == 201
+    codes = [f"{prefix}-{number:08d}" for number in (1, 2, 3)]
+    assert created.json()["asset_codes"] == codes
+    assert created.json()["quantity"] == 3
+    assert client.get("/api/inventory/summary").json()["totals"]["registered"] == 3
+    for code in codes:
+        assert client.get(f"/api/assets/{code}").json()["model"] == "R750"
+        assert client.get(f"/api/asset-labels/{code}/qr.svg").status_code == 200
+    assert client.get("/api/asset-labels/reprint", params={"start_code": codes[0], "quantity": 3}).json()["asset_codes"] == codes
+    assert client.post("/api/assets", json={"asset_type": asset_type, "site_type": "IDC"}).json()["asset_code"] == f"{prefix}-00000004"
+
+
+def test_batch_rejects_shared_serial_and_keeps_sequence(client):
+    rejected = client.post("/api/assets", json={
+        "asset_type": "SSD", "site_type": "IDC", "quantity": 2, "serial_number": "SN-1",
+    })
+    assert rejected.status_code == 422
+    assert client.post("/api/assets", json={"asset_type": "SSD", "site_type": "IDC"}).json()["asset_code"] == "ASSET-00000001"
 
 
 def test_asset_details_persist_allow_partial_changes_and_clear(client):
@@ -102,9 +158,30 @@ def test_invalid_specifications_are_not_saved(client, specifications):
 
 def test_mobile_navigation_and_specification_schema(client):
     assert 'href="/app"' in client.get("/mobile").text
+    assert 'id="register-site-options"' in client.get("/mobile").text
+    assert 'id="tab-sites"' in client.get("/app").text
+    assert 'id="panel-sites" role="tabpanel"' in client.get("/app").text
+    assert 'id="site-add-form"' in client.get("/app").text
     schema = client.get("/api/asset-specifications").json()
     assert schema["fields"]["capacity"]["units"] == ["GB", "TB"]
     assert schema["types"]["NETWORK"] == ["speed", "ports"]
+
+
+def test_10mm_label_preview_is_sample_only(client):
+    dashboard = client.get("/app")
+    preview = client.get("/label-10mm-preview")
+    assert dashboard.status_code == 200
+    assert 'href="/label-10mm-preview"' in dashboard.text
+    assert preview.status_code == 200
+    assert "width: 10mm; height: 10mm" in preview.text
+    assert "width: 8mm; height: 8mm" in preview.text
+    assert "DEMO-00000001" in preview.text
+    rendered_path = re.search(r'<path fill="none" stroke="#0f172a" d="([^"]+)"', preview.text)
+    expected_path = re.search(r'<path class="qrline" stroke="#0f172a" d="([^"]+)"', segno.make_qr("DEMO-00000001", error="M").svg_inline(scale=1, dark="#0f172a", light="#ffffff"))
+    assert rendered_path is not None and expected_path is not None
+    assert rendered_path.group(1) == expected_path.group(1)
+    with sys.modules["app"].get_db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM asset_labels").fetchone()[0] == 0
 
 
 @pytest.mark.parametrize("asset_type,specifications", [
@@ -317,6 +394,68 @@ def test_registration_rejects_unknown_reference_values(client, payload):
     )
 
     assert rejected.status_code == 422
+
+
+def test_custom_site_is_available_for_registration_movement_and_inventory(client):
+    assert client.get("/api/sites").json() == [
+        {"code": "IDC", "name": "데이터센터", "can_delete": False},
+        {"code": "OFFICE", "name": "사무실·창고", "can_delete": False},
+    ]
+    created = client.post("/api/sites", json={"code": "WAREHOUSE", "name": " 부품 창고 "})
+    assert created.status_code == 201
+    assert created.json() == {"code": "WAREHOUSE", "name": "부품 창고"}
+    register_first_asset(client, site_type="WAREHOUSE")
+    assert client.get("/api/assets/ASSET-00000001").json()["site_type"] == "WAREHOUSE"
+    assert next(site for site in client.get("/api/sites").json() if site["code"] == "WAREHOUSE")["can_delete"] is False
+    assert client.get("/api/assets", params={"site_type": "WAREHOUSE"}).json()[0]["asset_code"] == "ASSET-00000001"
+    assert client.get("/api/inventory/summary").json()["items"][0]["site_type"] == "WAREHOUSE"
+    assert client.post("/api/assets/ASSET-00000001/movements", json={"site_type": "IDC"}).status_code == 201
+    assert client.post("/api/assets/ASSET-00000001/movements", json={"site_type": "WAREHOUSE"}).status_code == 201
+    sys.modules["app"].init_db()
+    assert {site["code"] for site in client.get("/api/sites").json()} == {"IDC", "OFFICE", "WAREHOUSE"}
+    assert client.get("/api/assets/ASSET-00000001").json()["site_type"] == "WAREHOUSE"
+    assert client.delete("/api/sites/WAREHOUSE").status_code == 409
+
+
+def test_only_never_used_custom_site_can_be_deleted(client):
+    assert client.delete("/api/sites/IDC").status_code == 409
+    assert client.delete("/api/sites/OFFICE").status_code == 409
+    assert client.delete("/api/sites/UNKNOWN").status_code == 404
+    assert client.post("/api/sites", json={"code": "WAREHOUSE", "name": "부품 창고"}).status_code == 201
+    assert next(site for site in client.get("/api/sites").json() if site["code"] == "WAREHOUSE")["can_delete"] is True
+    assert client.delete("/api/sites/WAREHOUSE").json() == {"ok": True}
+    assert {site["code"] for site in client.get("/api/sites").json()} == {"IDC", "OFFICE"}
+
+
+def test_site_with_past_registration_or_movement_cannot_be_deleted(client):
+    assert client.post("/api/sites", json={"code": "WAREHOUSE", "name": "부품 창고"}).status_code == 201
+    register_first_asset(client, site_type="WAREHOUSE")
+    assert client.post("/api/assets/ASSET-00000001/movements", json={"site_type": "IDC"}).status_code == 201
+    assert client.delete("/api/sites/WAREHOUSE").status_code == 409
+    assert next(site for site in client.get("/api/sites").json() if site["code"] == "WAREHOUSE")["can_delete"] is False
+
+
+def test_custom_site_validates_code_name_and_unknown_movement(client):
+    assert client.post("/api/sites", json={"code": "bad code", "name": "창고"}).status_code == 422
+    assert client.post("/api/sites", json={"code": "WH", "name": "   "}).status_code == 422
+    assert client.post("/api/sites", json={"code": "IDC", "name": "다른 곳"}).status_code == 409
+    assert client.post("/api/sites", json={"code": "WH", "name": "데이터센터"}).status_code == 409
+    register_first_asset(client)
+    rejected = client.post("/api/assets/ASSET-00000001/movements", json={"site_type": "WAREHOUSE"})
+    assert rejected.status_code == 422
+    assert client.get("/api/assets/ASSET-00000001").json()["site_type"] == "IDC"
+
+
+def test_custom_site_can_receive_removed_component(client):
+    register_first_asset(client)
+    issue_first_server_label(client)
+    assert client.post("/api/assets/SVR-00000001/register", json={"site_type": "IDC"}).status_code == 201
+    assert client.post("/api/assets/ASSET-00000001/assignments", json={"target_asset_code": "SVR-00000001"}).status_code == 201
+    assert client.post("/api/assets/ASSET-00000001/assignments/remove", json={"site_type": "WAREHOUSE"}).status_code == 422
+    assert client.post("/api/sites", json={"code": "WAREHOUSE", "name": "창고"}).status_code == 201
+    removed = client.post("/api/assets/ASSET-00000001/assignments/remove", json={"site_type": "WAREHOUSE"})
+    assert removed.status_code == 200
+    assert removed.json()["site_type"] == "WAREHOUSE"
 
 
 def test_registration_rejects_an_unissued_asset_id(client):
@@ -676,6 +815,16 @@ def test_cloudflare_access_requires_login_and_operator_role(tmp_path, monkeypatc
             json={"quantity": 1},
         ).status_code == 403
         assert secured_client.post(
+            "/api/assets",
+            headers={"Cf-Access-Authenticated-User-Email": "operator@example.com"},
+            json={"asset_type": "SSD", "site_type": "IDC"},
+        ).status_code == 403
+        assert secured_client.post(
+            "/api/assets",
+            headers={"Cf-Access-Authenticated-User-Email": "admin@example.com"},
+            json={"asset_type": "SSD", "site_type": "IDC"},
+        ).status_code == 201
+        assert secured_client.post(
             "/api/server-labels",
             headers={"Cf-Access-Authenticated-User-Email": "viewer@example.com"},
             json={"quantity": 1},
@@ -684,6 +833,24 @@ def test_cloudflare_access_requires_login_and_operator_role(tmp_path, monkeypatc
             "/api/quotes",
             headers={"Cf-Access-Authenticated-User-Email": "viewer@example.com"},
             json={"name": "견적 품목"},
+        ).status_code == 403
+        assert secured_client.get(
+            "/api/sites",
+            headers={"Cf-Access-Authenticated-User-Email": "viewer@example.com"},
+        ).status_code == 200
+        assert secured_client.post(
+            "/api/sites",
+            headers={"Cf-Access-Authenticated-User-Email": "operator@example.com"},
+            json={"code": "WAREHOUSE", "name": "창고"},
+        ).status_code == 403
+        assert secured_client.post(
+            "/api/sites",
+            headers={"Cf-Access-Authenticated-User-Email": "admin@example.com"},
+            json={"code": "WAREHOUSE", "name": "창고"},
+        ).status_code == 201
+        assert secured_client.delete(
+            "/api/sites/WAREHOUSE",
+            headers={"Cf-Access-Authenticated-User-Email": "operator@example.com"},
         ).status_code == 403
 
         allowed = secured_client.post(

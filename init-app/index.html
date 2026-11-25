@@ -6,9 +6,9 @@
   <meta name="description" content="개별 자산 원장에서 집계한 전체 인프라 재고 현황">
   <title>InfraStock · 전체 재고 현황</title>
   <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/dashboard.css?v=labels-10mm-1">
-  <script src="/dashboard.js?v=labels-10mm-1" defer></script>
-  <script src="/purchase-quotes.js?v=purchase-compare-1" defer></script>
+  <link rel="stylesheet" href="/dashboard.css?v=asset-batch-1">
+  <script src="/dashboard.js?v=asset-batch-1" defer></script>
+  <script src="/purchase-quotes.js?v=sites-3" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -33,13 +33,14 @@
 
     <div class="tabs" role="tablist" aria-label="재고 화면">
       <button id="tab-stock" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="panel-stock" data-tab="stock">재고 현황</button>
+      <button id="tab-sites" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-sites" data-tab="sites">Site 관리</button>
       <button id="tab-quote" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-quote" data-tab="quote">구매 견적 비교</button>
       <button id="tab-label" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-label" data-tab="label">QR 라벨</button>
     </div>
 
     <section id="panel-stock" role="tabpanel" aria-labelledby="tab-stock">
       <div class="toolbar" aria-label="재고 필터">
-        <div class="field"><label for="stock-site">Site</label><select id="stock-site"><option value="">전체 Site</option><option value="IDC">IDC</option><option value="OFFICE">Office</option></select></div>
+        <div class="field"><label for="stock-site">Site</label><select id="stock-site"><option value="">전체 Site</option></select></div>
         <div class="field"><label for="stock-type">자산 유형</label><select id="stock-type"><option value="">전체 유형</option></select></div>
         <button id="refresh-stock" class="button secondary" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"/><path d="M18.5 9a7 7 0 0 0-12-2L4 12M20 12l-2.5 5a7 7 0 0 1-12-2"/></svg>새로고침</button>
       </div>
@@ -70,7 +71,25 @@
         </div>
         <div id="stock-empty" class="empty-state" hidden>
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg>
-          <h3>표시할 등록 자산이 없습니다</h3><p>모바일 앱에서 QR 자산을 등록하면 자동으로 집계됩니다.</p><a class="button primary" href="/mobile">모바일 등록 열기</a>
+          <h3>표시할 등록 자산이 없습니다</h3><p>QR 라벨 탭에서 자산을 등록하면 자동으로 집계됩니다.</p><button class="button primary" type="button" data-open-label>자산 등록 열기</button>
+        </div>
+      </section>
+    </section>
+
+    <section id="panel-sites" role="tabpanel" aria-labelledby="tab-sites" hidden>
+      <section class="site-management table-card" aria-labelledby="site-management-title">
+        <div class="section-heading"><div><h2 id="site-management-title">Site 관리</h2><p>자산을 구분하는 상위 위치를 추가하거나 사용 전 Site를 삭제합니다.</p></div></div>
+        <div class="site-management-content">
+          <p>코드는 생성 후 바꿀 수 없으며 영문 대문자·숫자·하이픈·밑줄로 입력합니다. 기본 Site와 자산·이력이 있는 Site는 삭제할 수 없습니다.</p>
+          <h3>새 Site 추가</h3>
+          <form id="site-add-form" class="site-add-form">
+            <div class="field"><label for="site-new-code">Site 코드</label><input id="site-new-code" required minlength="2" maxlength="24" pattern="[A-Z][A-Z0-9_-]+" autocapitalize="characters" spellcheck="false" placeholder="예: WAREHOUSE"></div>
+            <div class="field grow"><label for="site-new-name">표시 이름</label><input id="site-new-name" required maxlength="80" placeholder="예: 부품 창고"></div>
+            <button id="site-add-button" class="button primary" type="submit">Site 추가</button>
+          </form>
+          <p id="site-management-error" class="site-add-error" role="alert" hidden></p>
+          <h3>등록된 Site</h3>
+          <div id="site-list" class="site-list" aria-label="등록된 Site"></div>
         </div>
       </section>
     </section>
@@ -117,30 +136,40 @@
       <div class="label-controls">
         <div class="label-intro">
           <span class="eyebrow">Formtec QR-3111</span>
-          <h2>QR 라벨 발급·출력</h2>
+          <h2>자산 등록 → QR 라벨 출력</h2>
+          <p>수량만큼 자산을 등록하고 각 자산의 고유 ID와 QR을 생성합니다. 라벨을 인쇄해 해당 자산에 붙이세요.</p>
           <p>20×20mm 칸마다 10×10mm 라벨 4개를 2×2로 배치합니다. A4 104칸에 최대 416개를 출력하며, 각 칸 안에서는 왼쪽 위 → 오른쪽 위 → 왼쪽 아래 → 오른쪽 아래 순서입니다. 출력 후 10mm 단위로 직접 재단하세요. 인쇄 설정은 배율 100%와 여백 없음을 사용하세요. 첫 장 시작 칸은 용지의 위치만 바꾸며 ID 번호에는 영향을 주지 않습니다.</p>
+          <p><a href="/label-10mm-preview" target="_blank" rel="noopener">10×10mm 소형 QR 시험 렌더링 보기</a> · 예시 코드이며 실제 자산 ID는 발급하지 않습니다.</p>
         </div>
         <form id="label-issue-form" class="label-issue-form">
           <div class="field">
-            <label for="label-kind">라벨 종류</label>
-            <select id="label-kind" aria-describedby="label-kind-hint">
-              <option value="asset">일반 자산 (ASSET)</option>
-              <option value="server">서버 (SVR)</option>
-              <option value="network">네트워크 장비 (NET)</option>
+            <label for="label-asset-type">자산 유형</label>
+            <select id="label-asset-type" required>
+              <option value="">선택</option>
+              <option value="SSD">SSD</option><option value="HDD">HDD</option>
+              <option value="MEMORY">MEMORY</option><option value="NIC">NIC</option>
+              <option value="HBA">HBA</option><option value="RAID_CONTROLLER">RAID_CONTROLLER</option>
+              <option value="GPU">GPU</option><option value="PSU">PSU</option>
+              <option value="SERVER">SERVER</option><option value="NETWORK">NETWORK</option>
+              <option value="OTHER">OTHER</option>
             </select>
-            <small id="label-kind-hint">SVR은 SERVER, NET은 NETWORK 유형으로 자동 지정됩니다.</small>
+            <small>서버는 SVR, 네트워크 장비는 NET ID로 등록됩니다.</small>
           </div>
           <div class="field">
-            <label for="label-quantity">발급 수량</label>
-            <input id="label-quantity" type="number" inputmode="numeric" min="1" max="500" value="104" required aria-describedby="label-quantity-hint">
-            <small id="label-quantity-hint">버튼을 누르면 선택한 종류의 실제 ID가 즉시 발급됩니다.</small>
+            <label for="label-site">현재 Site</label>
+            <select id="label-site" required><option value="">Site 선택</option></select>
           </div>
+          <div class="field"><label for="label-quantity">등록 수량</label><input id="label-quantity" type="number" inputmode="numeric" min="1" max="500" step="1" value="1" required><small>수량별로 서로 다른 QR이 생성됩니다.</small></div>
+          <div class="field"><label for="label-serial">Serial Number (1대일 때만)</label><input id="label-serial" maxlength="240" autocomplete="off"><small>여러 대의 Serial은 등록 후 각 자산 상세에서 입력하세요.</small></div>
+          <div class="field"><label for="label-manufacturer">제조사 (선택)</label><input id="label-manufacturer" maxlength="240"></div>
+          <div class="field"><label for="label-model">모델 (선택)</label><input id="label-model" maxlength="240"></div>
+          <div class="field"><label for="label-part-number">P/N (선택)</label><input id="label-part-number" maxlength="240"></div>
           <div class="field">
             <label for="label-start-position">첫 장 시작 칸 (20mm 기준)</label>
             <input id="label-start-position" type="number" inputmode="numeric" min="1" max="104" value="1" required aria-describedby="label-position-hint">
             <small id="label-position-hint">20×20mm 칸 기준 1~104입니다. 선택한 칸의 왼쪽 위부터 출력합니다.</small>
           </div>
-          <button id="issue-labels" class="button primary" type="submit">ID 발급 및 라벨 생성</button>
+          <button id="issue-labels" class="button primary" type="submit">자산 등록 및 QR 생성</button>
         </form>
         <div class="label-reprint">
           <h3>기존 라벨 재출력</h3>

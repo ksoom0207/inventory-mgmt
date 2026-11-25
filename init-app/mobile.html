@@ -9,7 +9,7 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/mobile.css?v=inventory-nav-1">
-  <script src="/mobile.js?v=asset-specs-2" defer></script>
+  <script src="/mobile.js?v=camera-zoom-1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -111,10 +111,8 @@
 
         <fieldset aria-describedby="site-type-error">
           <legend>현재 Site <span aria-hidden="true">*</span></legend>
-          <div class="choice-grid site-grid">
-            <label class="choice-card"><input type="radio" name="site_type" value="IDC"><span><strong>IDC</strong><small>데이터센터</small></span></label>
-            <label class="choice-card"><input type="radio" name="site_type" value="OFFICE"><span><strong>Office</strong><small>사무실·창고</small></span></label>
-          </div>
+          <div id="register-site-options" class="choice-grid site-grid"></div>
+          <p class="field-hint">새 Site는 <a href="/app">전체 재고</a>의 Site 관리 탭에서 추가하세요.</p>
           <p id="site-type-error" class="field-error" role="alert"></p>
         </fieldset>
 
@@ -191,7 +189,7 @@
       <div class="screen-topbar"><button class="back-button" type="button" data-back-detail aria-label="자산 상세로 돌아가기"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><div><div class="eyebrow">현재 위치 변경</div><h1 id="move-title">자산 이동</h1></div></div>
       <p id="move-current" class="form-note"></p>
       <form id="move-form">
-        <fieldset><legend>새 Site <span aria-hidden="true">*</span></legend><div class="choice-grid site-grid"><label class="choice-card"><input type="radio" name="site_type" value="IDC"><span><strong>IDC</strong><small>데이터센터</small></span></label><label class="choice-card"><input type="radio" name="site_type" value="OFFICE"><span><strong>Office</strong><small>사무실·창고</small></span></label></div><p id="move-site-error" class="field-error" role="alert"></p></fieldset>
+        <fieldset><legend>새 Site <span aria-hidden="true">*</span></legend><div id="move-site-options" class="choice-grid site-grid"></div><p id="move-site-error" class="field-error" role="alert"></p></fieldset>
         <div class="form-field"><label for="move-location">상세 위치</label><input id="move-location" type="text" maxlength="240" placeholder="예: IDC-A / Rack-03"><p class="field-hint">모르면 비워둘 수 있습니다.</p></div>
         <div class="form-field"><label for="move-memo">이동 메모</label><textarea id="move-memo" maxlength="500" rows="3" placeholder="이동 사유 또는 참고사항"></textarea></div>
         <div class="sticky-action"><p id="move-error" class="submit-error" role="alert"></p><button id="move-submit" class="button primary full-width" type="submit">이동 완료</button></div>
@@ -224,7 +222,7 @@
     <section id="screen-remove" class="screen has-sticky-action" hidden aria-labelledby="remove-title">
       <div class="screen-topbar"><button class="back-button" type="button" data-back-detail aria-label="자산 상세로 돌아가기"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><div><div class="eyebrow">사용처 종료</div><h1 id="remove-title">서버 탈착</h1></div></div>
       <form id="remove-form">
-        <fieldset><legend>탈착 후 Site <span aria-hidden="true">*</span></legend><div class="choice-grid site-grid"><label class="choice-card"><input type="radio" name="site_type" value="IDC"><span><strong>IDC</strong></span></label><label class="choice-card"><input type="radio" name="site_type" value="OFFICE"><span><strong>Office</strong></span></label></div><p id="remove-site-error" class="field-error" role="alert"></p></fieldset>
+        <fieldset><legend>탈착 후 Site <span aria-hidden="true">*</span></legend><div id="remove-site-options" class="choice-grid site-grid"></div><p id="remove-site-error" class="field-error" role="alert"></p></fieldset>
         <div class="form-field"><label for="remove-location">상세 위치</label><input id="remove-location" type="text" maxlength="240" placeholder="예: IDC-A / 예비품 선반"></div>
         <div class="form-field"><label for="remove-reason">탈착 사유</label><textarea id="remove-reason" maxlength="500" rows="3" placeholder="교체, 장애, 점검 등"></textarea></div>
         <div class="sticky-action"><p id="remove-error" class="submit-error" role="alert"></p><button id="remove-submit" class="button primary full-width" type="submit">탈착 완료</button></div>

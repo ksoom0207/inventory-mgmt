@@ -90,6 +90,7 @@
   $("#offer-date").value = new Date().toISOString().slice(0, 10);
   $("#purchase-offer-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
     const button = $("#offer-save");
     const error = $("#offer-form-error");
     error.hidden = true;
@@ -112,7 +113,7 @@
           lead_days: $("#offer-lead-days").value === "" ? null : Number($("#offer-lead-days").value),
         }),
       });
-      event.currentTarget.reset();
+      form.reset();
       $("#offer-item").value = itemId;
       $("#offer-date").value = new Date().toISOString().slice(0, 10);
       await loadOffers();

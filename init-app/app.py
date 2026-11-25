@@ -148,6 +148,12 @@ def init_db():
                 singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
                 next_value INTEGER NOT NULL CHECK (next_value > 0)
             );
+            CREATE TABLE IF NOT EXISTS sites (
+                code TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS sites_name_unique ON sites(name COLLATE NOCASE);
             CREATE TABLE IF NOT EXISTS asset_labels (
                 asset_code          TEXT PRIMARY KEY,
                 sequence_number     INTEGER NOT NULL UNIQUE,
@@ -253,6 +259,10 @@ def init_db():
             VALUES (1, 1);
             INSERT OR IGNORE INTO network_id_sequence (singleton, next_value)
             VALUES (1, 1);
+            INSERT OR IGNORE INTO sites (code, name, created_at)
+            VALUES ('IDC', '데이터센터', 'system');
+            INSERT OR IGNORE INTO sites (code, name, created_at)
+            VALUES ('OFFICE', '사무실·창고', 'system');
             """
         )
         # 마이그레이션: 기존 DB에 price 컬럼이 없으면 추가
@@ -393,7 +403,25 @@ class AssetRegistrationIn(BaseModel):
         "SSD", "HDD", "MEMORY", "NIC", "HBA", "RAID_CONTROLLER",
         "GPU", "PSU", "SERVER", "NETWORK", "OTHER",
     ]] = None
-    site_type: Literal["IDC", "OFFICE"]
+    site_type: str = Field(min_length=2, max_length=24, pattern=r"^[A-Z][A-Z0-9_-]*$")
+
+
+class AssetCreateIn(BaseModel):
+    asset_type: Literal[
+        "SSD", "HDD", "MEMORY", "NIC", "HBA", "RAID_CONTROLLER",
+        "GPU", "PSU", "SERVER", "NETWORK", "OTHER",
+    ]
+    site_type: str = Field(min_length=2, max_length=24, pattern=r"^[A-Z][A-Z0-9_-]*$")
+    quantity: int = Field(default=1, ge=1, le=500)
+    serial_number: Optional[str] = Field(default=None, max_length=240)
+    manufacturer: Optional[str] = Field(default=None, max_length=240)
+    model: Optional[str] = Field(default=None, max_length=240)
+    part_number: Optional[str] = Field(default=None, max_length=240)
+
+
+class SiteIn(BaseModel):
+    code: str = Field(min_length=2, max_length=24, pattern=r"^[A-Z][A-Z0-9_-]*$")
+    name: str = Field(min_length=1, max_length=80)
 
 
 class QuoteItemIn(BaseModel):
@@ -422,7 +450,7 @@ class PurchaseOfferIn(BaseModel):
 
 
 class AssetMovementIn(BaseModel):
-    site_type: Literal["IDC", "OFFICE"]
+    site_type: str = Field(min_length=2, max_length=24, pattern=r"^[A-Z][A-Z0-9_-]*$")
     detailed_location: Optional[str] = Field(default=None, max_length=240)
     memo: Optional[str] = Field(default=None, max_length=500)
 
@@ -449,12 +477,72 @@ class AssignmentIn(BaseModel):
 
 
 class AssignmentRemovalIn(BaseModel):
-    site_type: Literal["IDC", "OFFICE"]
+    site_type: str = Field(min_length=2, max_length=24, pattern=r"^[A-Z][A-Z0-9_-]*$")
     detailed_location: Optional[str] = Field(default=None, max_length=240)
     reason: Optional[str] = Field(default=None, max_length=500)
 
 
 # ---------- API ----------
+def require_site(conn: sqlite3.Connection, code: str) -> None:
+    if conn.execute("SELECT 1 FROM sites WHERE code = ?", (code,)).fetchone() is None:
+        raise HTTPException(422, "unknown site; add it in Site management first")
+
+
+def site_has_history(conn: sqlite3.Connection, code: str) -> bool:
+    checks = (
+        ("SELECT 1 FROM assets WHERE site_type = ? LIMIT 1", (code,)),
+        ("SELECT 1 FROM asset_movements WHERE from_site_type = ? OR to_site_type = ? LIMIT 1", (code, code)),
+        ("""SELECT 1 FROM asset_events
+            WHERE json_extract(before_data, '$.site_type') = ?
+               OR json_extract(after_data, '$.site_type') = ? LIMIT 1""", (code, code)),
+    )
+    return any(conn.execute(sql, params).fetchone() is not None for sql, params in checks)
+
+
+@app.get("/api/sites")
+def list_sites():
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT code, name FROM sites ORDER BY CASE code WHEN 'IDC' THEN 0 WHEN 'OFFICE' THEN 1 ELSE 2 END, name, code"
+        ).fetchall()
+        return [
+            {**dict(row), "can_delete": row["code"] not in ("IDC", "OFFICE") and not site_has_history(conn, row["code"])}
+            for row in rows
+        ]
+
+
+@app.post("/api/sites", status_code=201)
+def create_site(site: SiteIn, _actor: str = Depends(require_admin)):
+    name = site.name.strip()
+    if not name:
+        raise HTTPException(422, "site name is required")
+    with get_db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("SELECT 1 FROM sites WHERE code = ?", (site.code,)).fetchone():
+            raise HTTPException(409, "site code already exists")
+        if conn.execute("SELECT 1 FROM sites WHERE name = ? COLLATE NOCASE", (name,)).fetchone():
+            raise HTTPException(409, "site name already exists")
+        conn.execute(
+            "INSERT INTO sites (code, name, created_at) VALUES (?, ?, ?)",
+            (site.code, name, datetime.now(timezone.utc).isoformat()),
+        )
+    return {"code": site.code, "name": name}
+
+
+@app.delete("/api/sites/{code}")
+def delete_site(code: str, _actor: str = Depends(require_admin)):
+    with get_db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("SELECT 1 FROM sites WHERE code = ?", (code,)).fetchone() is None:
+            raise HTTPException(404, "site not found")
+        if code in ("IDC", "OFFICE"):
+            raise HTTPException(409, "default sites cannot be deleted")
+        if site_has_history(conn, code):
+            raise HTTPException(409, "site has asset or movement history and cannot be deleted")
+        conn.execute("DELETE FROM sites WHERE code = ?", (code,))
+    return {"ok": True}
+
+
 def storage_inventory_group(asset_type: str, specifications: str):
     """One canonical key shared by summary rows and their asset drill-down."""
     specs = json.loads(specifications or "{}")
@@ -847,6 +935,72 @@ def list_assets(
     return result
 
 
+@app.post("/api/assets", status_code=201)
+def create_asset(asset: AssetCreateIn, actor: str = Depends(require_admin)):
+    """Register physical assets and allocate one printable QR ID per asset atomically."""
+    if asset.asset_type == "SERVER":
+        sequence_table, prefix = "server_id_sequence", "SVR"
+    elif asset.asset_type == "NETWORK":
+        sequence_table, prefix = "network_id_sequence", "NET"
+    else:
+        sequence_table, prefix = "asset_id_sequence", "ASSET"
+    created_at = datetime.now(timezone.utc).isoformat()
+    details = {
+        key: (getattr(asset, key) or "").strip() or None
+        for key in ("serial_number", "manufacturer", "model", "part_number")
+    }
+    if asset.quantity > 1 and details["serial_number"]:
+        raise HTTPException(422, "serial_number must be entered per asset when quantity is greater than one")
+    with get_db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        require_site(conn, asset.site_type)
+        sequence_number = conn.execute(
+            f"SELECT next_value FROM {sequence_table} WHERE singleton = 1"
+        ).fetchone()["next_value"]
+        if sequence_number + asset.quantity - 1 > 99999999:
+            raise HTTPException(409, "asset ID sequence exhausted")
+        conn.execute(
+            f"UPDATE {sequence_table} SET next_value = ? WHERE singleton = 1",
+            (sequence_number + asset.quantity,),
+        )
+        internal_sequence = 0 if prefix == "ASSET" else conn.execute(
+            "SELECT MIN(COALESCE(MIN(sequence_number), 0), 0) - 1 FROM asset_labels"
+        ).fetchone()[0]
+        asset_codes = []
+        for offset in range(asset.quantity):
+            number = sequence_number + offset
+            asset_code = f"{prefix}-{number:08d}"
+            label_sequence = number if prefix == "ASSET" else internal_sequence - offset
+            conn.execute(
+                """INSERT INTO asset_labels
+                   (asset_code, sequence_number, registration_status, created_at)
+                   VALUES (?, ?, 'REGISTERED', ?)""",
+                (asset_code, label_sequence, created_at),
+            )
+            conn.execute(
+                """INSERT INTO assets
+                   (asset_code, asset_type, status, site_type, serial_number, manufacturer,
+                    model, part_number, created_at, updated_at)
+                   VALUES (?, ?, 'AVAILABLE', ?, ?, ?, ?, ?, ?, ?)""",
+                (asset_code, asset.asset_type, asset.site_type, details["serial_number"],
+                 details["manufacturer"], details["model"], details["part_number"],
+                 created_at, created_at),
+            )
+            conn.execute(
+                """INSERT INTO asset_events
+                   (asset_code, action, before_data, after_data, actor, created_at)
+                   VALUES (?, 'REGISTER', NULL, ?, ?, ?)""",
+                (asset_code, json.dumps({"asset_type": asset.asset_type, "status": "AVAILABLE",
+                                         "site_type": asset.site_type, **details}, ensure_ascii=False),
+                 actor, created_at),
+            )
+            asset_codes.append(asset_code)
+    return {"asset_code": asset_codes[0], "asset_codes": asset_codes,
+            "quantity": asset.quantity, "registration_status": "REGISTERED",
+            "asset_type": asset.asset_type, "status": "AVAILABLE",
+            "site_type": asset.site_type, **details}
+
+
 @app.get("/api/asset-specifications")
 def asset_specification_schema():
     return {"fields": SPEC_FIELDS, "types": SPEC_TYPES}
@@ -1061,6 +1215,7 @@ def remove_asset_assignment(
     reason = removal.reason.strip() if removal.reason else None
     with get_db() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        require_site(conn, removal.site_type)
         asset = conn.execute(
             "SELECT site_type, detailed_location FROM assets WHERE asset_code = ?",
             (asset_code,),
@@ -1119,6 +1274,7 @@ def move_asset(
     memo = movement.memo.strip() if movement.memo else None
     with get_db() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        require_site(conn, movement.site_type)
         current = conn.execute(
             """SELECT site_type, detailed_location FROM assets
                WHERE asset_code = ?""",
@@ -1205,6 +1361,7 @@ def register_asset(
 ):
     with get_db() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        require_site(conn, registration.site_type)
         label = conn.execute(
             """SELECT registration_status FROM asset_labels
                WHERE asset_code = ?""",
@@ -1427,6 +1584,11 @@ def mobile_styles():
 @app.get("/dashboard.css")
 def dashboard_styles():
     return FileResponse(os.path.join(BASE_DIR, "dashboard.css"), media_type="text/css")
+
+
+@app.get("/label-10mm-preview")
+def label_10mm_preview():
+    return FileResponse(os.path.join(BASE_DIR, "label-10mm-preview.html"), headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/dashboard.js")

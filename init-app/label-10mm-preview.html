@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>10×10mm QR 라벨 시험 렌더링</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #0f172a; background: #f1f5f9; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 20px 56px; }
+    h1 { margin: 12px 0 8px; font-size: clamp(23px, 4vw, 30px); }
+    h2 { margin: 0 0 16px; font-size: 17px; }
+    p { line-height: 1.6; }
+    a { color: #1d4ed8; }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 22px 0; }
+    button { min-height: 44px; padding: 10px 18px; border: 0; border-radius: 8px; background: #1d4ed8; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    button:focus-visible, a:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+    .card { min-height: 270px; padding: 22px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; }
+    .card p { margin: 18px 0 0; color: #475569; font-size: 14px; }
+    .actual-stage { display: flex; align-items: flex-start; gap: 16px; min-height: 128px; padding: 16px; border: 1px solid #e2e8f0; background: #f8fafc; }
+    .actual-stage strong { font-size: 13px; line-height: 1.5; }
+    .label { width: 10mm; height: 10mm; flex: none; display: grid; place-items: center; border: .15mm dashed #64748b; background: #fff; }
+    .label svg { display: block; width: 8mm; height: 8mm; }
+    .zoom-stage { height: 190px; padding: 12px; overflow: hidden; border: 1px solid #e2e8f0; background: #f8fafc; }
+    .zoom-stage .label { transform: scale(4); transform-origin: top left; margin: 4px 0 0 4px; }
+    .note { margin-top: 20px; padding: 14px 16px; border-left: 4px solid #d97706; background: #fffbeb; }
+    @page { size: A4 portrait; margin: 0; }
+    @media print {
+      :root { background: #fff; }
+      main { max-width: none; margin: 0; padding: 0; }
+      main > :not(.cards), .cards .card:nth-child(2), .card h2, .card p, .actual-stage strong { display: none !important; }
+      .cards, .card, .actual-stage { display: block; min-height: 0; padding: 0; border: 0; background: transparent; }
+      .actual-stage { position: absolute; top: 20mm; left: 20mm; }
+      .label { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <a href="/app">← 재고 앱으로</a>
+    <h1>10×10mm QR 라벨 시험 렌더링</h1>
+    <p>라벨 안에 8×8mm 일반 QR을 배치했습니다. QR에는 URL이 아닌 <strong>DEMO-00000001</strong>만 들어 있습니다. 발급된 자산 ID가 아니므로 운영에 사용하지 마세요.</p>
+    <div class="actions"><button type="button" onclick="window.print()">A4 시험 인쇄</button><span>배율 100% · 여백 없음 · 라벨 1개</span></div>
+    <div class="cards">
+      <section class="card" aria-labelledby="actual-title">
+        <h2 id="actual-title">실제 크기 · 10×10mm</h2>
+        <div class="actual-stage">
+          <div class="label" aria-label="10×10mm 시험 라벨: DEMO-00000001 일반 QR">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" role="img" aria-label="DEMO-00000001 QR 코드"><path fill="#fff" d="M0 0h29v29h-29z"/><path fill="none" stroke="#0f172a" d="M4 4.5h7m4 0h1m2 0h7m-21 1h1m5 0h1m1 0h4m2 0h1m5 0h1m-21 1h1m1 0h3m1 0h1m1 0h1m1 0h3m1 0h1m1 0h3m1 0h1m-21 1h1m1 0h3m1 0h1m2 0h1m4 0h1m1 0h3m1 0h1m-21 1h1m1 0h3m1 0h1m2 0h4m1 0h1m1 0h3m1 0h1m-21 1h1m5 0h1m2 0h1m1 0h1m2 0h1m5 0h1m-21 1h7m1 0h1m1 0h1m1 0h1m1 0h7m-12 1h4m-12 1h3m1 0h2m2 0h1m1 0h2m5 0h2m-20 1h1m3 0h1m2 0h3m2 0h1m2 0h1m1 0h4m-21 1h1m5 0h1m1 0h3m3 0h1m3 0h3m-19 1h2m1 0h1m1 0h2m3 0h2m2 0h3m-16 1h2m1 0h4m5 0h1m3 0h1m-12 1h1m1 0h2m2 0h1m3 0h1m-19 1h7m3 0h1m2 0h1m2 0h2m1 0h2m-21 1h1m5 0h1m1 0h3m3 0h2m1 0h1m2 0h1m-21 1h1m1 0h3m1 0h1m3 0h3m1 0h1m2 0h1m1 0h2m-21 1h1m1 0h3m1 0h1m1 0h3m2 0h1m2 0h4m-20 1h1m1 0h3m1 0h1m1 0h2m1 0h1m3 0h1m1 0h2m-19 1h1m5 0h1m1 0h1m2 0h2m1 0h1m-15 1h7m4 0h3m2 0h1m2 0h1"/></svg>
+          </div>
+          <strong>화면에서는 실제 크기와 다르게 보일 수 있습니다.<br>인쇄 후 자로 확인하세요.</strong>
+        </div>
+        <p>점선은 10mm 재단선입니다. QR 안의 흰 여백은 스캔에 필요한 여백입니다.</p>
+      </section>
+      <section class="card" aria-labelledby="zoom-title">
+        <h2 id="zoom-title">화면 확대 · 4배</h2>
+        <div class="zoom-stage" id="zoom-stage" aria-hidden="true"></div>
+        <p>구조 확인용 확대 화면이며 인쇄 크기에는 영향을 주지 않습니다.</p>
+      </section>
+    </div>
+    <p class="note">이 페이지는 크기·스캔 시험용입니다. 실제 발급·재출력 화면은 Formtec 20×20mm 한 칸에 10×10mm 라벨 4개를 배치합니다.</p>
+  </main>
+  <script>document.getElementById("zoom-stage").append(document.querySelector(".label").cloneNode(true));</script>
+</body>
+</html>

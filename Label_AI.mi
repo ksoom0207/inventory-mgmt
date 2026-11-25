@@ -1,0 +1,1442 @@
+# SSD/HDD 라벨 사진 자동 분석 기능 추가 기획서
+
+## 1. 기능 개요
+
+### 1.1 기능명
+
+**자산 라벨 사진 자동 분석 및 정보 입력**
+
+### 1.2 목적
+
+SSD/HDD 신규 자산 등록 시 사용자가 제조사, 모델명, Serial Number, 용량 등의 정보를 직접 입력하지 않고, **제품 라벨 사진을 촬영하면 시스템이 자동으로 정보를 추출하고 입력값을 제안**하도록 한다.
+
+기존의 단순 등록 흐름은 유지한다.
+
+```text
+QR 스캔
+↓
+자산 종류 선택
+↓
+IDC / Office 선택
+↓
+등록 완료
+```
+
+이후 사용자가 원하는 경우:
+
+```text
+[ 라벨 사진으로 정보 자동 입력 ]
+```
+
+기능을 선택하여 상세 정보를 보완한다.
+
+핵심 원칙은 다음과 같다.
+
+**“자산 등록은 빠르게 유지하고, AI 분석은 상세정보 입력을 편하게 만드는 선택 기능으로 제공한다.”**
+
+---
+
+# 2. 적용 대상
+
+초기 적용 대상은 다음 두 종류로 제한한다.
+
+```text
+SSD
+HDD
+```
+
+향후 운영 결과에 따라 다음 자산으로 확장할 수 있다.
+
+```text
+Memory
+NIC
+HBA
+RAID Controller
+GPU
+PSU
+Server
+```
+
+---
+
+# 3. 사용자 시나리오
+
+## 3.1 신규 자산 등록 후 분석
+
+사용자가 미리 발급된 QR을 SSD에 부착한다.
+
+```text
+QR Scan
+
+ASSET-00000127
+```
+
+최소 등록:
+
+```text
+Asset Type
+SSD
+
+Site
+IDC
+
+[등록]
+```
+
+등록 완료 후:
+
+```text
+ASSET-00000127
+
+SSD
+IDC
+
+상세정보
+미입력
+
+[ 라벨 사진으로 자동 입력 ]
+
+[ 나중에 입력 ]
+```
+
+사용자가 자동 입력을 선택하면 카메라가 실행된다.
+
+---
+
+# 4. 촬영 화면
+
+```text
+┌──────────────────────────┐
+│ ← 라벨 사진 촬영        │
+├──────────────────────────┤
+│                          │
+│  제품 라벨이 화면 안에   │
+│  들어오도록 촬영해주세요 │
+│                          │
+│    ┌────────────────┐    │
+│    │                │    │
+│    │   SSD LABEL    │    │
+│    │                │    │
+│    └────────────────┘    │
+│                          │
+│                          │
+│       [ 촬영 ]           │
+│                          │
+│ Tip                      │
+│ 글자가 선명하고          │
+│ 반사가 적게 촬영해주세요 │
+└──────────────────────────┘
+```
+
+촬영 후 이미지 품질을 확인한다.
+
+---
+
+# 5. 촬영 품질 검사
+
+분석 요청 전 기본적인 이미지 품질 검사를 수행한다.
+
+검사 항목:
+
+```text
+흔들림 여부
+초점 상태
+과도한 반사
+너무 어두운 이미지
+라벨 영역 존재 여부
+이미지 회전 상태
+```
+
+품질이 너무 낮은 경우:
+
+```text
+라벨 정보가 선명하지 않습니다.
+
+[ 다시 촬영 ]
+
+[ 그래도 분석 ]
+```
+
+를 제공한다.
+
+---
+
+# 6. 분석 처리 구조
+
+전체 분석 과정은 다음과 같다.
+
+```text
+사진 촬영
+   │
+   ▼
+이미지 전처리
+   │
+   ├─ 회전 보정
+   ├─ Crop
+   ├─ 원근 보정
+   └─ 라벨 영역 추출
+   │
+   ▼
+Barcode / QR Decoder
+   │
+   ▼
+OCR
+   │
+   ▼
+Vision Language Model
+   │
+   ▼
+Field Normalizer
+   │
+   ▼
+Confidence 계산
+   │
+   ▼
+사용자 확인
+   │
+   ▼
+자산 정보 저장
+```
+
+---
+
+# 7. 각 분석 단계의 역할
+
+## 7.1 Barcode Decoder
+
+제품 라벨에 존재하는 바코드 또는 DataMatrix 등을 우선 분석한다.
+
+주요 추출 대상:
+
+```text
+Serial Number
+Part Number
+Model Number
+WWN
+제품 코드
+```
+
+문자 OCR보다 바코드 디코딩 결과가 신뢰할 수 있는 경우 우선 사용한다.
+
+---
+
+## 7.2 OCR
+
+라벨의 전체 텍스트를 추출한다.
+
+예:
+
+```text
+SAMSUNG
+
+PM9A3
+
+MZQL23T8HCLS-00A07
+
+3.84TB
+
+S/N S6XXXXXXXX
+
+DC +12V
+```
+
+OCR 단계에서는 값의 의미를 결정하지 않고 문자 정보 자체를 추출한다.
+
+---
+
+## 7.3 Vision Language Model
+
+OCR 및 이미지 정보를 기반으로 각 문자열의 의미를 판별한다.
+
+예:
+
+```text
+Samsung
+→ manufacturer
+
+PM9A3
+→ product_family
+
+MZQL23T8HCLS-00A07
+→ part_number
+
+3.84TB
+→ capacity
+
+S6XXXXXXXX
+→ serial_number
+```
+
+---
+
+# 8. VLM 출력 규칙
+
+VLM은 반드시 구조화된 결과만 반환하도록 한다.
+
+예:
+
+```json
+{
+  "asset_type": "SSD",
+  "manufacturer": "Samsung",
+  "product_family": "PM9A3",
+  "model": null,
+  "part_number": "MZQL23T8HCLS-00A07",
+  "serial_number": "S6XXXXXXXX",
+  "capacity_display": "3.84TB",
+  "capacity_bytes": 3840000000000,
+  "interface": null,
+  "form_factor": null,
+  "wwn": null,
+  "firmware": null
+}
+```
+
+---
+
+# 9. 추측 방지 정책
+
+AI는 사진에서 확인되지 않는 정보를 임의로 입력하지 않는다.
+
+예를 들어 사진에서:
+
+```text
+PM9A3
+3.84TB
+```
+
+만 확인되는 경우:
+
+```text
+manufacturer = Samsung
+product_family = PM9A3
+capacity = 3.84TB
+```
+
+까지만 기록한다.
+
+사진만 보고 명확히 확인되지 않은:
+
+```text
+PCIe Generation
+Form Factor
+Interface 세부 규격
+DWPD
+Endurance
+Firmware
+```
+
+등은 추측하지 않는다.
+
+값을 확인할 수 없는 경우:
+
+```json
+{
+  "interface": null,
+  "form_factor": null
+}
+```
+
+로 반환한다.
+
+---
+
+# 10. 정보 출처 구분
+
+자동 입력된 값에는 정보가 어디에서 나온 것인지 기록한다.
+
+지원 출처:
+
+```text
+BARCODE
+OCR
+VISION
+PRODUCT_DATABASE
+MANUAL
+```
+
+예:
+
+```text
+Serial
+S6XXXXXXXX
+Source: BARCODE
+
+Model
+PM9A3
+Source: OCR
+
+Interface
+NVMe
+Source: PRODUCT_DATABASE
+```
+
+사용자가 직접 수정하면:
+
+```text
+Source: MANUAL
+```
+
+로 변경한다.
+
+---
+
+# 11. Confidence 관리
+
+각 필드에 신뢰도를 부여한다.
+
+예:
+
+```json
+{
+  "serial_number": {
+    "value": "S6XXXXXXXX",
+    "confidence": 0.99
+  },
+  "model": {
+    "value": "PM9A3",
+    "confidence": 0.96
+  },
+  "interface": {
+    "value": "NVMe",
+    "confidence": 0.81
+  }
+}
+```
+
+UI에서는 다음처럼 표현한다.
+
+```text
+Serial
+S6XXXXXXXX             ✓ 99%
+
+Model
+PM9A3                   ✓ 96%
+
+Capacity
+3.84TB                  ✓ 99%
+
+Interface
+NVMe                    ? 81%
+```
+
+---
+
+# 12. 자동 확정 기준
+
+필드별 자동 적용 정책을 둔다.
+
+예:
+
+```text
+Confidence >= 95%
+→ 자동 선택
+
+80% ~ 94%
+→ 값 제안 + 사용자 확인
+
+80% 미만
+→ 자동 입력하지 않고 후보만 표시
+```
+
+중요도가 높은 값은 별도 기준을 적용한다.
+
+특히 다음 값은 사용자 확인을 권장한다.
+
+```text
+Serial Number
+Part Number
+WWN
+```
+
+---
+
+# 13. 결과 확인 화면
+
+```text
+┌──────────────────────────┐
+│ 라벨 분석 결과           │
+├──────────────────────────┤
+│ ASSET-00000127           │
+│                          │
+│ 종류                     │
+│ SSD                99%   │
+│                          │
+│ 제조사                   │
+│ Samsung            99%   │
+│                          │
+│ 모델                     │
+│ PM9A3              96%   │
+│                          │
+│ 용량                     │
+│ 3.84 TB            99%   │
+│                          │
+│ Serial                   │
+│ S6XXXXXXXX         98%   │
+│                          │
+│ Part Number              │
+│ MZQL23T8...        97%   │
+│                          │
+│ Interface                │
+│ NVMe               82%   │
+│                          │
+│ [ 수정 ]                 │
+│                          │
+│ [ 정보 적용 ]            │
+└──────────────────────────┘
+```
+
+사용자는 적용 전 모든 결과를 수정할 수 있다.
+
+---
+
+# 14. 분석 실패 처리
+
+정확한 정보를 추출하지 못한 경우 등록 자체를 막지 않는다.
+
+예:
+
+```text
+라벨 정보를 충분히 확인하지 못했습니다.
+
+확인된 정보
+
+Manufacturer
+Samsung
+
+Capacity
+3.84TB
+
+확인 필요
+
+Serial Number
+Model
+
+[ 확인된 정보만 적용 ]
+
+[ 다시 촬영 ]
+
+[ 직접 입력 ]
+```
+
+---
+
+# 15. 다중 사진 지원
+
+제품에 따라 정보가 여러 라벨에 나뉘어 있을 수 있으므로 향후 여러 장의 사진을 지원한다.
+
+예:
+
+```text
+사진 1
+제품 전면 라벨
+
+사진 2
+후면 라벨
+
+사진 3
+Serial Barcode
+```
+
+분석 결과는 하나의 Asset 정보로 병합한다.
+
+충돌하는 값이 있을 경우 자동 선택하지 않는다.
+
+예:
+
+```text
+Serial 후보가 서로 다릅니다.
+
+사진 1
+S6ABC123
+
+사진 2
+S6ABC128
+
+어떤 값이 맞습니까?
+```
+
+---
+
+# 16. 제품 DB 보강
+
+라벨에서 추출한 Part Number 또는 Model을 기반으로 내부 제품 DB에서 추가 정보를 찾을 수 있다.
+
+예:
+
+```text
+P/N
+MZQL23T8HCLS-00A07
+```
+
+제품 DB:
+
+```text
+Manufacturer
+Samsung
+
+Product Family
+PM9A3
+
+Capacity
+3.84TB
+
+Interface
+NVMe
+
+Form Factor
+U.2
+```
+
+라벨에서 직접 읽은 정보와 제품 DB를 구분해서 관리한다.
+
+---
+
+# 17. 제품 마스터 테이블
+
+향후 정확도 향상을 위해 제품 마스터 정보를 구축할 수 있다.
+
+예:
+
+```text
+product_models
+--------------------------------
+id
+manufacturer
+product_family
+model_number
+part_number
+capacity
+interface
+form_factor
+description
+```
+
+한 번 확인된 제품을 Product Master에 등록하면 같은 모델의 다음 자산부터 자동 분석 정확도를 높일 수 있다.
+
+---
+
+# 18. 동일 모델 반복 등록
+
+SSD 20개가 동일 모델인 경우 첫 번째 제품을 분석한다.
+
+```text
+Samsung
+PM9A3
+3.84TB
+```
+
+시스템은 Product Master와 매칭한다.
+
+이후 동일한 Part Number가 발견되면:
+
+```text
+Manufacturer
+Samsung
+
+Model
+PM9A3
+
+Capacity
+3.84TB
+```
+
+은 자동 적용한다.
+
+각 제품마다 다른 값인:
+
+```text
+Serial Number
+WWN
+```
+
+만 개별 추출한다.
+
+---
+
+# 19. 연속 입고 모드
+
+대량 입고를 위한 별도의 작업 화면을 제공한다.
+
+```text
+┌──────────────────────────┐
+│ SSD 연속 등록            │
+├──────────────────────────┤
+│ 공통 정보                │
+│                          │
+│ Type      SSD            │
+│ Site      IDC            │
+│                          │
+│ 진행                     │
+│ 7 / 20                   │
+├──────────────────────────┤
+│                          │
+│ 1. Asset QR 스캔         │
+│                          │
+│ 2. 제품 라벨 촬영       │
+│                          │
+│ 3. 분석 확인             │
+│                          │
+│ 4. 다음 자산             │
+│                          │
+└──────────────────────────┘
+```
+
+작업 흐름:
+
+```text
+Asset QR
+↓
+Label Photo
+↓
+자동 분석
+↓
+확인
+↓
+다음 Asset
+```
+
+---
+
+# 20. 서버 구성
+
+기존 Inventory Backend와 AI 분석 영역을 분리한다.
+
+```text
+Cloudflare Tunnel
+        │
+        ▼
+Inventory Frontend
+        │
+        ▼
+Inventory API
+        │
+        ├──────── PostgreSQL
+        │
+        └──────── Vision Service
+                       │
+                       ▼
+                      GPU
+```
+
+---
+
+# 21. 서비스 분리
+
+초기 권장 구성:
+
+```text
+inventory-web
+
+inventory-api
+
+vision-worker
+
+postgresql
+```
+
+필요 시 다음과 같이 확장한다.
+
+```text
+inventory-web
+
+inventory-api
+
+postgresql
+
+redis
+
+vision-api
+
+vision-worker-01
+
+vision-worker-02
+```
+
+---
+
+# 22. AI Worker 역할
+
+`vision-worker`는 다음 기능만 담당한다.
+
+```text
+이미지 입력
+
+이미지 전처리
+
+Barcode 분석
+
+OCR
+
+Vision Model 추론
+
+Structured JSON 생성
+
+Confidence 계산
+```
+
+자산 DB를 직접 수정하지 않는다.
+
+최종 DB 반영은 Inventory API가 담당한다.
+
+---
+
+# 23. API 설계
+
+## 라벨 분석 요청
+
+```text
+POST /api/v1/assets/{asset_id}/label-analysis
+```
+
+입력:
+
+```text
+multipart/form-data
+
+image
+```
+
+예:
+
+```text
+POST
+/api/v1/assets/ASSET-00000127/label-analysis
+```
+
+---
+
+# 24. 분석 응답
+
+예:
+
+```json
+{
+  "analysis_id": "analysis_83af",
+  "asset_id": "ASSET-00000127",
+  "result": {
+    "manufacturer": {
+      "value": "Samsung",
+      "confidence": 0.99,
+      "source": "VISION"
+    },
+    "product_family": {
+      "value": "PM9A3",
+      "confidence": 0.96,
+      "source": "OCR"
+    },
+    "serial_number": {
+      "value": "S6XXXXXXXX",
+      "confidence": 0.99,
+      "source": "BARCODE"
+    },
+    "capacity_display": {
+      "value": "3.84TB",
+      "confidence": 0.99,
+      "source": "OCR"
+    }
+  }
+}
+```
+
+---
+
+# 25. 분석 결과 적용 API
+
+사용자가 결과를 확인한 후:
+
+```text
+POST /api/v1/assets/{asset_id}/label-analysis/{analysis_id}/apply
+```
+
+요청:
+
+```json
+{
+  "manufacturer": "Samsung",
+  "product_family": "PM9A3",
+  "serial_number": "S6XXXXXXXX",
+  "capacity_display": "3.84TB"
+}
+```
+
+Inventory API가 실제 자산정보에 반영한다.
+
+---
+
+# 26. 분석 이력
+
+AI 분석 결과도 Audit 대상으로 관리한다.
+
+예:
+
+```text
+ASSET-00000127
+
+2026-09-28 09:40
+
+LABEL_ANALYSIS
+
+Model
+vision-model-v1
+
+Detected
+Samsung PM9A3
+3.84TB
+S6XXXXXXXX
+
+Applied By
+sumin
+```
+
+AI 모델 버전도 기록한다.
+
+---
+
+# 27. 데이터베이스 추가 테이블
+
+## asset_label_analyses
+
+```text
+id
+
+asset_id
+
+image_path
+
+analysis_status
+
+model_name
+
+model_version
+
+raw_ocr_text
+
+raw_barcode_data
+
+analysis_result
+
+created_by
+
+created_at
+```
+
+---
+
+## asset_field_sources
+
+```text
+id
+
+asset_id
+
+field_name
+
+field_value
+
+source_type
+
+confidence
+
+analysis_id
+
+created_at
+```
+
+예:
+
+```text
+asset_id
+ASSET-00000127
+
+field_name
+serial_number
+
+field_value
+S6XXXXXXXX
+
+source_type
+BARCODE
+
+confidence
+0.99
+```
+
+---
+
+# 28. 이미지 저장 정책
+
+제품 라벨 사진은 선택적으로 저장할 수 있다.
+
+권장 정책:
+
+```text
+분석 이미지 저장
+ON
+
+원본 사진
+보관
+
+Thumbnail
+생성
+
+Asset 상세 화면에서 확인 가능
+```
+
+예:
+
+```text
+ASSET-00000127
+
+[ 제품 라벨 사진 ]
+
+2026-09-28
+```
+
+추후 Serial 확인이나 오입력 검증에 사용할 수 있다.
+
+---
+
+# 29. 이미지 접근 권한
+
+제품 라벨에는 Serial Number 등 자산 식별 정보가 있으므로 일반 외부 공개를 금지한다.
+
+이미지는 반드시:
+
+```text
+Cloudflare Access
++
+Inventory Application 인증
+```
+
+을 거친 사용자만 조회할 수 있도록 한다.
+
+스토리지 URL을 외부에 직접 공개하지 않는다.
+
+---
+
+# 30. 분석 상태
+
+AI 분석 작업은 다음 상태를 가진다.
+
+```text
+UPLOADED
+
+PROCESSING
+
+COMPLETED
+
+REVIEW_REQUIRED
+
+FAILED
+
+APPLIED
+```
+
+예:
+
+```text
+ASSET-00000127
+
+Analysis Status
+REVIEW_REQUIRED
+```
+
+---
+
+# 31. 중복 Serial 검출
+
+Serial Number가 추출되면 기존 DB와 비교한다.
+
+예:
+
+```text
+감지된 Serial
+S6XXXXXXXX
+```
+
+이미 존재하면:
+
+```text
+주의
+
+동일한 Serial Number가
+이미 등록되어 있습니다.
+
+ASSET-00000841
+
+[ 기존 자산 보기 ]
+
+[ 계속 등록 ]
+```
+
+으로 표시한다.
+
+중복 Serial을 자동으로 덮어쓰지 않는다.
+
+---
+
+# 32. Asset Type 검증
+
+사용자가 자산을 SSD로 등록했는데 이미지 분석 결과가 HDD로 판단되는 경우 경고한다.
+
+```text
+등록된 자산 종류
+SSD
+
+사진 분석 결과
+HDD
+
+자산 종류가 일치하지 않습니다.
+
+[ SSD 유지 ]
+
+[ HDD로 변경 ]
+```
+
+자동으로 변경하지 않는다.
+
+---
+
+# 33. 용량 정규화
+
+용량은 표시값과 내부값을 분리해서 저장한다.
+
+예:
+
+```text
+표시값
+3.84 TB
+```
+
+내부:
+
+```text
+capacity_bytes
+3840000000000
+```
+
+이후 검색 및 집계에 활용한다.
+
+예:
+
+```text
+3TB 이상 SSD
+4TB급 SSD
+7.68TB SSD
+```
+
+---
+
+# 34. Serial 정규화
+
+Serial Number는 저장 전 다음 처리를 한다.
+
+```text
+앞뒤 공백 제거
+
+줄바꿈 제거
+
+불필요한 구분 문자 제거
+
+대소문자 정책 통일
+```
+
+단, 원본 OCR/Barcode 값도 별도 저장한다.
+
+---
+
+# 35. 사진 재분석
+
+관리자는 기존 사진을 다시 분석할 수 있다.
+
+예:
+
+```text
+ASSET-00000127
+
+[ AI 재분석 ]
+```
+
+새로운 모델 버전으로 다시 분석하더라도 기존 결과를 삭제하지 않는다.
+
+```text
+Analysis #1
+vision-v1
+
+Analysis #2
+vision-v2
+```
+
+이력으로 관리한다.
+
+---
+
+# 36. 사용자 수정 우선 정책
+
+사용자가 직접 확인하여 수정한 값은 AI가 자동으로 덮어쓰지 않는다.
+
+예:
+
+```text
+Serial
+S6ABC123
+
+Source
+MANUAL
+```
+
+AI 재분석 결과:
+
+```text
+S6ABC128
+```
+
+이면:
+
+```text
+기존 사용자 입력값과
+AI 분석 결과가 다릅니다.
+
+현재
+S6ABC123
+
+AI 제안
+S6ABC128
+
+[현재 값 유지]
+
+[AI 값 적용]
+```
+
+으로 처리한다.
+
+---
+
+# 37. MVP 범위
+
+최초 구현 범위는 다음으로 제한한다.
+
+```text
+SSD / HDD 지원
+
+휴대폰 사진 촬영
+
+이미지 Upload
+
+Barcode 분석
+
+OCR
+
+Vision Model 분석
+
+Manufacturer 추출
+
+Model / Product Family 추출
+
+Serial Number 추출
+
+Part Number 추출
+
+Capacity 추출
+
+Confidence 표시
+
+사용자 확인
+
+정보 적용
+
+중복 Serial 검사
+
+분석 이력 저장
+```
+
+---
+
+# 38. MVP에서 제외
+
+첫 버전에서는 다음 기능을 제외한다.
+
+```text
+인터넷 제품 검색
+
+제조사 API 연동
+
+자동 보증기간 조회
+
+자동 RMA 조회
+
+SMART 데이터 분석
+
+제품 성능 스펙 자동 검색
+
+여러 사진 자동 병합
+
+Memory / NIC / GPU 분석
+```
+
+MVP 안정화 후 Phase 2에서 추가한다.
+
+---
+
+# 39. Phase 2
+
+```text
+다중 사진 분석
+
+제품 Master 자동 매칭
+
+같은 제품 반복 등록 최적화
+
+HDD WWN 추출
+
+Firmware 추출
+
+Interface 자동 판별
+
+Form Factor 판별
+
+Memory / NIC / GPU 지원
+
+연속 입고 모드
+
+제품 사진 보관
+```
+
+---
+
+# 40. Phase 3
+
+```text
+서버 Agent와 자동 매칭
+
+smartctl 결과 비교
+
+nvme list 결과 비교
+
+Serial 자동 검증
+
+실제 서버 장착 위치 확인
+
+Inventory 정보와
+실장 정보 불일치 탐지
+```
+
+예:
+
+```text
+Inventory
+
+ASSET-00000127
+Serial: S6XXXXXXXX
+Server: Server-12
+```
+
+실제 서버:
+
+```text
+nvme0
+Serial: S6XXXXXXXX
+```
+
+결과:
+
+```text
+✓ Inventory와 실제 장착 상태 일치
+```
+
+---
+
+# 41. 운영 목표
+
+이 기능의 최종 목표는 사용자가 다음 값을 타이핑하지 않도록 하는 것이다.
+
+```text
+Samsung
+
+PM9A3
+
+MZQL23T8HCLS-00A07
+
+S6XXXXXXXX
+
+3.84TB
+```
+
+사용자는:
+
+```text
+QR 부착
+↓
+QR 스캔
+↓
+SSD / IDC 선택
+↓
+등록
+↓
+제품 라벨 촬영
+↓
+분석 결과 확인
+↓
+적용
+```
+
+만 수행한다.
+
+---
+
+# 42. 핵심 설계 원칙
+
+### 1. 최초 자산 등록을 AI 기능에 의존시키지 않는다.
+
+AI 장애가 발생해도:
+
+```text
+QR
+→ SSD
+→ IDC
+→ 등록
+```
+
+은 항상 가능해야 한다.
+
+### 2. AI는 정보를 제안한다.
+
+자동 분석 결과가 DB에 바로 반영되지 않도록 한다.
+
+### 3. Serial 등 핵심 식별자는 검증한다.
+
+Barcode, OCR, VLM 결과를 비교하여 정확도를 높인다.
+
+### 4. 추측하지 않는다.
+
+확인되지 않는 정보는 `null`로 남긴다.
+
+### 5. 사용자 입력을 우선한다.
+
+사람이 확인한 정보는 AI가 임의로 변경하지 않는다.
+
+### 6. 모든 분석과 수정은 이력으로 남긴다.
+
+어떤 이미지와 어떤 모델이 어떤 값을 제안했고, 최종적으로 누가 어떤 값을 적용했는지 추적할 수 있어야 한다.
+
+---
+
+# 43. 최종 기능 정의
+
+이 기능은 단순한 OCR 기능이 아니라 다음 세 기능을 결합한 **자산 정보 자동화 기능**으로 정의한다.
+
+```text
+Barcode
+→ 정확한 식별자 추출
+
+OCR
+→ 라벨 문자 추출
+
+Vision AI
+→ 문자열 의미 이해 및 구조화
+```
+
+결과적으로:
+
+**“우리 QR은 자산의 신원을 식별하고, 제조사 라벨 사진은 해당 자산이 무엇인지 자동으로 설명한다.”**
