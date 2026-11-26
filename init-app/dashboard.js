@@ -7,7 +7,7 @@ function toast(message){clearTimeout(toastTimer);$("#toast").textContent=message
 function sum(items,key){return items.reduce((n,x)=>n+Number(x[key]||0),0)}
 function filtered(){const site=$("#stock-site").value,type=$("#stock-type").value;return inventory.items.filter(x=>(!site||x.site_type===site)&&(!type||x.asset_type===type))}
 function siteLabel(code){const site=sites.find(x=>x.code===code);return site?`${site.code} · ${site.name}`:code}
-async function loadPrefixes(){prefixes=await api("/asset-code-prefixes");const select=$("#label-code-prefix"),selected=select.value;select.innerHTML='<option value="">접두어 선택</option>'+prefixes.map(item=>`<option value="${esc(item.prefix)}">${esc(item.prefix)}</option>`).join("");if(prefixes.some(item=>item.prefix===selected))select.value=selected;else if($("#label-asset-type").value)select.value=$("#label-asset-type").value==="SERVER"?"SVR":$("#label-asset-type").value==="NETWORK"?"NET":"ASSET";$("#prefix-list").textContent=`등록된 접두어: ${prefixes.map(item=>item.prefix).join(" · ")}`}
+async function loadPrefixes(){prefixes=await api("/asset-code-prefixes");const select=$("#label-code-prefix"),selected=select.value;select.innerHTML='<option value="">접두어 선택</option>'+prefixes.map(item=>`<option value="${esc(item.prefix)}">${esc(item.prefix)}</option>`).join("");if(prefixes.some(item=>item.prefix===selected))select.value=selected;else if($("#label-asset-type").value)select.value=$("#label-asset-type").value==="SERVER"?"SVR":$("#label-asset-type").value==="NETWORK"?"NET":"ASSET"}
 async function loadSites(){sites=await api("/sites");const select=$("#stock-site"),selected=select.value;select.innerHTML='<option value="">전체 Site</option>'+sites.map(site=>`<option value="${esc(site.code)}">${esc(siteLabel(site.code))}</option>`).join("");if(sites.some(site=>site.code===selected))select.value=selected;const labelSite=$("#label-site"),labelSelected=labelSite.value;labelSite.innerHTML='<option value="">Site 선택</option>'+sites.map(site=>`<option value="${esc(site.code)}">${esc(siteLabel(site.code))}</option>`).join("");if(sites.some(site=>site.code===labelSelected))labelSite.value=labelSelected;$("#site-list").innerHTML=sites.map(site=>`<div class="site-entry"><span class="site-entry-label">${esc(siteLabel(site.code))}</span>${site.can_delete?`<button type="button" class="button danger" data-delete-site="${esc(site.code)}" aria-label="${esc(site.code)} Site 삭제">삭제</button>`:`<small>${site.code==="IDC"||site.code==="OFFICE"?"기본 Site":"사용 이력 있음 · 삭제 불가"}</small>`}</div>`).join("");renderInventory()}
 function populateTypes(){const select=$("#stock-type"),selected=select.value,types=[...new Set(inventory.items.map(x=>x.asset_type))].sort();select.innerHTML='<option value="">전체 유형</option>'+types.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");if(types.includes(selected))select.value=selected}
 function renderInventory(){const items=filtered(),metrics=[["등록 자산",sum(items,"registered"),""],["정상 재고",sum(items,"normal"),""],["사용 가능",sum(items,"available"),""],["장애 자산",sum(items,"faulty"),"fault"]];$("#stock-cards").innerHTML=metrics.map(([l,v,k])=>`<article class="metric ${k}"><span class="label">${l}</span><strong class="value">${v.toLocaleString("ko-KR")}</strong></article>`).join("");const faulty=sum(items,"faulty");$("#fault-notice").hidden=!faulty;$("#fault-title").textContent=`장애 자산 ${faulty.toLocaleString("ko-KR")}개가 별도로 분리되어 있습니다.`;$("#row-count").textContent=`${items.length}개 그룹`;const body=$("#stock-body");$("#stock-empty").hidden=!!items.length;body.closest(".table-wrap").hidden=!items.length;body.innerHTML=items.map(x=>`<tr><td data-label="자산 유형"><strong>${esc(x.asset_type)}</strong></td><td data-label="사양">${esc(x.specification_label||"—")}</td><td data-label="Site">${esc(siteLabel(x.site_type))}</td><td data-label="정상 재고" class="number">${x.normal}</td><td data-label="사용 가능" class="number">${x.available}</td><td data-label="사용 중" class="number">${x.in_use}</td><td data-label="장애" class="number ${x.faulty?"fault-number":""}">${x.faulty}</td><td data-label="폐기" class="number">${x.disposed}</td><td><button class="button secondary small" type="button" data-view-assets data-type="${esc(x.asset_type)}" data-site="${esc(x.site_type)}" data-group="${esc(x.group_key||"")}" data-specification="${esc(x.specification_label||"")}">자산 보기</button></td></tr>`).join("")}
@@ -17,10 +17,17 @@ function asOf(prices,date){return prices.filter(x=>x.date<=date).sort((a,b)=>b.d
 function renderQuotes(){const q=$("#quote-search").value.trim().toLowerCase(),date=$("#quote-date").value||today(),rows=quoteParts.filter(x=>!q||x.name.toLowerCase().includes(q)||x.category.toLowerCase().includes(q)||(x.part_number||"").toLowerCase().includes(q)),body=$("#quote-body");$("#quote-empty").hidden=!!rows.length;body.closest(".table-wrap").hidden=!rows.length;body.innerHTML=rows.map(x=>{const p=asOf(x.prices,date);return`<tr><td data-label="부품명"><input aria-label="${esc(x.name)} 부품명" value="${esc(x.name)}" data-quote-name="${esc(x.id)}"></td><td data-label="카테고리">${esc(x.category)}</td><td data-label="P/N"><input aria-label="${esc(x.name)} P/N" value="${esc(x.part_number||"")}" data-quote-part-number="${esc(x.id)}"></td><td data-label="기준 단가" class="number"><input aria-label="${esc(x.name)} 기준 단가" inputmode="numeric" value="${p?p.price.toLocaleString("ko-KR"):""}" data-quote-price="${esc(x.id)}"></td><td><button class="button danger small" type="button" data-delete-quote="${esc(x.id)}">삭제</button></td></tr>`}).join("")}
 async function loadQuotes(){try{quoteParts=await api("/quotes");renderQuotes();document.dispatchEvent(new Event("quote-catalog-changed"))}catch(e){toast(`견적을 불러오지 못했습니다: ${e.message}`)}}
 function selectTab(name){document.querySelectorAll("[role=tab]").forEach(tab=>{const on=tab.dataset.tab===name;tab.classList.toggle("active",on);tab.setAttribute("aria-selected",String(on));$("#panel-"+tab.dataset.tab).hidden=!on});if(name==="label")loadPrintAssets();if(name==="sites")loadSites().catch(e=>toast(`Site 목록을 불러오지 못했습니다: ${e.message}`));if(name==="quote"){if(!quoteParts.length)loadQuotes();document.dispatchEvent(new Event("quote-tab-selected"))}}
-$("[data-open-label]").addEventListener("click",()=>{selectTab("register");$("#label-asset-type").focus()});
+const registerDialog = $("#register-dialog");
+document.querySelectorAll("[data-open-register]").forEach(button => {
+  button.addEventListener("click", () => {
+    $("#registration-result").textContent = "";
+    registerDialog.showModal();
+    $("#label-code-prefix").focus();
+  });
+});
+$("#close-register").addEventListener("click", () => registerDialog.close());
+
 $("#label-asset-type").addEventListener("change",()=>{const select=$("#label-code-prefix");if(!select.value)select.value=$("#label-asset-type").value==="SERVER"?"SVR":$("#label-asset-type").value==="NETWORK"?"NET":"ASSET"});
-$("#prefix-new-code").addEventListener("input",e=>{const start=e.target.selectionStart,end=e.target.selectionEnd;e.target.value=e.target.value.toUpperCase();e.target.setSelectionRange(start,end)});
-$("#prefix-add-form").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,code=$("#prefix-new-code").value.trim().toUpperCase(),button=$("#prefix-add-button"),error=$("#prefix-add-error");error.hidden=true;button.disabled=true;try{await api("/asset-code-prefixes",{method:"POST",body:JSON.stringify({prefix:code})});await loadPrefixes();$("#label-code-prefix").value=code;form.reset();toast(`${code} 접두어를 추가했습니다.`)}catch(err){error.textContent=`접두어를 추가하지 못했습니다: ${err.message}`;error.hidden=false}finally{button.disabled=false}});
 function renderLabelSheets(codes,startPosition){
   const pages=[];
   let codeIndex=0;
@@ -74,7 +81,7 @@ $("#label-issue-form").addEventListener("submit", async event => {
   const quantity = Number($("#label-quantity").value);
   const serial = $("#label-serial").value.trim();
   if (quantity > 1 && serial) {
-    toast("여러 대 등록 시 Serial Number를 비우세요.");
+    $("#registration-result").textContent = "여러 대 등록 시 Serial Number를 비우세요.";
     $("#label-serial").focus();
     return;
   }
@@ -92,7 +99,10 @@ $("#label-issue-form").addEventListener("submit", async event => {
     })});
     result.textContent = created.quantity + "건 등록 완료 · " + created.asset_codes[0]
       + (created.quantity > 1 ? " ~ " + created.asset_codes.at(-1) : "");
-    $("#label-serial").value = "";
+    toast(result.textContent);
+    $("#label-issue-form").reset();
+    showBatchSpecs();
+    registerDialog.close();
     await loadInventory();
   } catch (error) { result.textContent = "등록 실패 · " + error.message; }
   finally { button.disabled = false; }

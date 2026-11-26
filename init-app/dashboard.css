@@ -53,8 +53,65 @@ dialog{width:min(calc(100% - 32px),720px);max-height:min(760px,calc(100dvh - 48p
 .specification-guide-content p{margin:0 0 8px}
 .specification-guide-content p:last-child{margin-bottom:0}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important}}
-@media print{@page{size:A4 portrait;margin:0}.site-header,.skip-link,.page-heading,.tabs,#panel-register,#panel-stock,#panel-sites,#panel-quote,.label-controls,.toast{display:none!important}body,.page{width:210mm;min-width:0;margin:0;padding:0;background:#fff}#panel-label{display:block!important}.label-preview{overflow:visible;display:block;padding:0;border:0;background:#fff}.label-sheet{margin:0;padding:18mm 14.5mm 19mm;box-shadow:none;break-after:page;page-break-after:always}.label-sheet:last-child{break-after:auto;page-break-after:auto}.qr-label{border:0;outline:0}.qr-label.blank{background:transparent}}
+@media print{@page{size:A4 portrait;margin:0}.site-header,.skip-link,.page-heading,.tabs,#panel-stock,#panel-sites,#panel-quote,.label-controls,.toast{display:none!important}body,.page{width:210mm;min-width:0;margin:0;padding:0;background:#fff}#panel-label{display:block!important}.label-preview{overflow:visible;display:block;padding:0;border:0;background:#fff}.label-sheet{margin:0;padding:18mm 14.5mm 19mm;box-shadow:none;break-after:page;page-break-after:always}.label-sheet:last-child{break-after:auto;page-break-after:auto}.qr-label{border:0;outline:0}.qr-label.blank{background:transparent}}
 
 #print-assets{display:grid;max-height:22rem;overflow:auto;gap:4px;margin:12px 0}#print-assets label{display:flex;align-items:center;gap:8px;padding:4px 8px}#print-assets input{min-height:24px}#print-selection .field{margin:12px 0;max-width:240px}
 
-#batch-specs{flex-basis:100%;min-width:0}#batch-spec-fields{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0}
+#batch-specs {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  margin: 8px 0 0;
+  padding: 16px clamp(12px, 2vw, 24px) 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+}
+#batch-specs legend { padding: 0 6px; font-weight: 750; }
+#batch-spec-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 16px;
+  margin-top: 14px;
+  align-items: start;
+}
+#batch-spec-fields .field { width: auto; min-width: 0; }
+#batch-spec-fields :is(input, select, textarea) {
+  width: 100%;
+  min-width: 0;
+  background: var(--surface);
+}
+#batch-spec-fields .field:has(select[id$="-unit"]) {
+  grid-template-columns: minmax(0, 1fr) minmax(75px, auto);
+}
+#batch-spec-fields .field > label:first-child { grid-column: 1 / -1; }
+#batch-spec-fields label[for$="-unit"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+#batch-spec-fields .field:has(textarea) { grid-column: 1 / -1; }
+#batch-spec-fields textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+#batch-spec-fields textarea:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+#register-dialog { width: min(840px, calc(100% - 24px)); }
+#register-dialog form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr));
+  padding: 18px;
+  align-items: start;
+}
+#register-dialog .field { width: auto; min-width: 0; }
+#register-dialog #batch-specs { grid-column: 1 / -1; }
+#register-dialog #issue-labels { grid-column: 1 / -1; justify-self: end; margin-top: 0; }
+#registration-result:not(:empty) { margin: 0 18px 18px; }
+#registration-result:empty { display: none; }

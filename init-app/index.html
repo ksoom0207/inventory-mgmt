@@ -6,9 +6,9 @@
   <meta name="description" content="개별 자산 원장에서 집계한 전체 인프라 재고 현황">
   <title>InfraStock · 전체 재고 현황</title>
   <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/dashboard.css?v=batch-specs-1">
+  <link rel="stylesheet" href="/dashboard.css?v=register-dialog-1">
   <script src="/specification-form.js" defer></script>
-  <script src="/dashboard.js?v=batch-specs-1" defer></script>
+  <script src="/dashboard.js?v=register-dialog-1" defer></script>
   <script src="/purchase-quotes.js?v=sites-3" defer></script>
 </head>
 <body>
@@ -36,7 +36,6 @@
       <button id="tab-stock" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="panel-stock" data-tab="stock">재고 현황</button>
       <button id="tab-sites" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-sites" data-tab="sites">Site 관리</button>
       <button id="tab-quote" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-quote" data-tab="quote">구매 견적 비교</button>
-      <button id="tab-register" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-register" data-tab="register">자산 등록</button>
       <button id="tab-label" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-label" data-tab="label">QR 라벨 출력</button>
     </div>
 
@@ -44,6 +43,7 @@
       <div class="toolbar" aria-label="재고 필터">
         <div class="field"><label for="stock-site">Site</label><select id="stock-site"><option value="">전체 Site</option></select></div>
         <div class="field"><label for="stock-type">자산 유형</label><select id="stock-type"><option value="">전체 유형</option></select></div>
+        <button class="button primary" type="button" data-open-register aria-haspopup="dialog">자산 등록</button>
         <button id="refresh-stock" class="button secondary" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"/><path d="M18.5 9a7 7 0 0 0-12-2L4 12M20 12l-2.5 5a7 7 0 0 1-12-2"/></svg>새로고침</button>
       </div>
 
@@ -73,7 +73,7 @@
         </div>
         <div id="stock-empty" class="empty-state" hidden>
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg>
-          <h3>표시할 등록 자산이 없습니다</h3><p>자산 등록 탭에서 자산을 등록하면 자동으로 집계됩니다.</p><button class="button primary" type="button" data-open-label>자산 등록 열기</button>
+          <h3>표시할 등록 자산이 없습니다</h3><p>자산을 등록하면 여기에 집계됩니다.</p><button class="button primary" type="button" data-open-register aria-haspopup="dialog">자산 등록 열기</button>
         </div>
       </section>
     </section>
@@ -134,19 +134,42 @@
       </section>
     </section>
 
-    <section id="panel-register" role="tabpanel" aria-labelledby="tab-register" hidden>
+    <section id="panel-label" role="tabpanel" aria-labelledby="tab-label" hidden>
       <div class="label-controls">
-        <h2>자산 등록</h2>
-        <div class="label-prefix-management">
-          <h3>자산 코드 접두어 등록</h3>
-          <p>접두어를 한 번 등록하면 자산 유형과 별도로 선택할 수 있습니다. 접두어마다 00001부터 독립적으로 번호가 붙습니다.</p>
-          <form id="prefix-add-form" class="label-issue-form">
-            <div class="field"><label for="prefix-new-code">새 접두어</label><input id="prefix-new-code" required minlength="2" maxlength="8" pattern="[A-Z][A-Z0-9]{1,7}" placeholder="예: SSD" autocapitalize="characters" spellcheck="false"><small>영문 대문자로 시작, 영문 대문자·숫자 2~8자</small></div>
-            <button id="prefix-add-button" class="button secondary" type="submit">접두어 추가</button>
-          </form>
-          <p id="prefix-add-error" class="site-add-error" role="alert" hidden></p>
-          <p id="prefix-list" class="prefix-list" aria-label="등록된 자산 코드 접두어"></p>
+        <div class="label-intro">
+          <span class="eyebrow">Formtec QR-3111</span>
+          <h2>QR 라벨 출력</h2>
+          <p>출력할 자산을 선택하세요. 선택한 자산마다 라벨 한 장을 인쇄합니다.</p>
+          <p>20×20mm 칸마다 10×10mm 라벨 4개를 2×2로 배치합니다. A4 104칸에 최대 416개를 출력하며, 각 칸 안에서는 왼쪽 위 → 오른쪽 위 → 왼쪽 아래 → 오른쪽 아래 순서입니다. 출력 후 10mm 단위로 직접 재단하세요. 인쇄 설정은 배율 100%와 여백 없음을 사용하세요. 첫 장 시작 칸은 용지의 위치만 바꾸며 ID 번호에는 영향을 주지 않습니다.</p>
+          <p><a href="/label-10mm-preview" target="_blank" rel="noopener">10×10mm 소형 QR 시험 렌더링 보기</a> · 예시 코드이며 실제 자산 ID는 발급하지 않습니다.</p>
         </div>
+        <form id="print-selection">
+          <label for="print-search">등록 자산 검색</label>
+          <input type="search" id="print-search" placeholder="자산 ID · 유형 · Site">
+          <button type="button" class="button secondary" id="select-visible">검색 결과 모두 선택</button>
+          <button type="button" class="button secondary" id="clear-selection">전체 선택 해제</button>
+          <div id="print-assets" aria-label="등록 자산 목록"></div>
+          <div class="field">
+            <label for="label-start-position">첫 장 시작 칸 (20mm 기준)</label>
+            <input id="label-start-position" type="number" inputmode="numeric" min="1" max="104" value="1" required aria-describedby="label-position-hint">
+            <small id="label-position-hint">20×20mm 칸 기준 1~104입니다. 선택한 칸의 왼쪽 위부터 출력합니다.</small>
+          </div>
+          <button type="submit" class="button primary" id="preview-selected" disabled>선택 0건 미리보기</button>
+        </form>
+        <div id="label-result-actions" class="label-result-actions" hidden>
+          <p id="label-status" role="status" aria-live="polite"></p>
+          <button id="print-labels" class="button primary" type="button">인쇄 창 열기</button>
+        </div>
+      </div>
+      <div id="label-preview" class="label-preview" aria-label="A4 QR 라벨 미리보기"></div>
+    </section>
+  </main>
+
+  <dialog id="register-dialog" aria-labelledby="register-title">
+    <div class="dialog-header">
+      <h2 id="register-title">자산 등록</h2>
+      <button class="button secondary" id="close-register" type="button">닫기</button>
+    </div>
         <form id="label-issue-form" class="label-issue-form">
           <div class="field">
             <label for="label-code-prefix">자산 코드 접두어</label>
@@ -181,39 +204,8 @@
           </fieldset>
           <button id="issue-labels" class="button primary" type="submit">자산 등록</button>
         </form>
-        <p id="registration-result" role="status"></p>
-      </div>
-    </section>
-    <section id="panel-label" role="tabpanel" aria-labelledby="tab-label" hidden>
-      <div class="label-controls">
-        <div class="label-intro">
-          <span class="eyebrow">Formtec QR-3111</span>
-          <h2>QR 라벨 출력</h2>
-          <p>출력할 자산을 선택하세요. 선택한 자산마다 라벨 한 장을 인쇄합니다.</p>
-          <p>20×20mm 칸마다 10×10mm 라벨 4개를 2×2로 배치합니다. A4 104칸에 최대 416개를 출력하며, 각 칸 안에서는 왼쪽 위 → 오른쪽 위 → 왼쪽 아래 → 오른쪽 아래 순서입니다. 출력 후 10mm 단위로 직접 재단하세요. 인쇄 설정은 배율 100%와 여백 없음을 사용하세요. 첫 장 시작 칸은 용지의 위치만 바꾸며 ID 번호에는 영향을 주지 않습니다.</p>
-          <p><a href="/label-10mm-preview" target="_blank" rel="noopener">10×10mm 소형 QR 시험 렌더링 보기</a> · 예시 코드이며 실제 자산 ID는 발급하지 않습니다.</p>
-        </div>
-        <form id="print-selection">
-          <label for="print-search">등록 자산 검색</label>
-          <input type="search" id="print-search" placeholder="자산 ID · 유형 · Site">
-          <button type="button" class="button secondary" id="select-visible">검색 결과 모두 선택</button>
-          <button type="button" class="button secondary" id="clear-selection">전체 선택 해제</button>
-          <div id="print-assets" aria-label="등록 자산 목록"></div>
-          <div class="field">
-            <label for="label-start-position">첫 장 시작 칸 (20mm 기준)</label>
-            <input id="label-start-position" type="number" inputmode="numeric" min="1" max="104" value="1" required aria-describedby="label-position-hint">
-            <small id="label-position-hint">20×20mm 칸 기준 1~104입니다. 선택한 칸의 왼쪽 위부터 출력합니다.</small>
-          </div>
-          <button type="submit" class="button primary" id="preview-selected" disabled>선택 0건 미리보기</button>
-        </form>
-        <div id="label-result-actions" class="label-result-actions" hidden>
-          <p id="label-status" role="status" aria-live="polite"></p>
-          <button id="print-labels" class="button primary" type="button">인쇄 창 열기</button>
-        </div>
-      </div>
-      <div id="label-preview" class="label-preview" aria-label="A4 QR 라벨 미리보기"></div>
-    </section>
-  </main>
+    <p id="registration-result" role="status"></p>
+  </dialog>
 
   <dialog id="asset-dialog" aria-labelledby="asset-dialog-title">
     <div class="dialog-header">
