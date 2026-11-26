@@ -24,7 +24,7 @@ docker compose up -d --build
 
 - 전체 재고 화면: http://localhost:3004/app
 - 모바일 등록 PWA: http://localhost:3004/mobile
-- QR 딥링크 예시: http://localhost:3004/a/ASSET-00000001
+- QR 딥링크 예시: http://localhost:3004/a/ASSET-00001
 
 중지:
 ```bash
@@ -71,6 +71,7 @@ docker run -d --name idc-inventory -p 8080:80 -v inventory-data:/data idc-invent
 |--------|------|------|
 | POST | `/api/asset-labels` | Inventory 서버에서 QR용 Asset ID 일괄 발급 |
 | POST | `/api/assets` | 수량만큼 개별 자산을 등록하고 각 자산의 고유 QR용 ID를 함께 생성 |
+| GET/POST | `/api/asset-code-prefixes` | 등록 가능한 자산 코드 접두어 조회/추가 (추가는 관리자) |
 | POST | `/api/server-labels` | Inventory 서버에서 QR용 Server ID 일괄 발급 |
 | POST | `/api/network-labels` | 네트워크 장비용 NET ID 일괄 발급 |
 | GET | `/api/assets/{asset_code}` | 미등록 라벨 또는 등록 자산 조회 |
@@ -83,7 +84,7 @@ docker run -d --name idc-inventory -p 8080:80 -v inventory-data:/data idc-invent
 | POST | `/api/assets/{asset_code}/assignments` | SERVER 자산에 장착 |
 | POST | `/api/assets/{asset_code}/assignments/remove` | SERVER 자산에서 탈착 |
 
-일반 자산 ID는 `ASSET-00000001`, 서버 ID는 `SVR-00000001`부터 각각 독립적으로 발급됩니다. SVR 라벨은 등록 시 `SERVER` 유형으로 자동 지정됩니다. 기본 Site는 `IDC`, `OFFICE`이며 `/app`의 `Site 관리` 탭에서 새 Site 코드와 표시 이름을 추가할 수 있습니다. 추가된 Site는 모바일 등록·이동·탈착 및 재고 필터에 반영됩니다. Site 코드는 생성 후 변경할 수 없으며, 기존 자산의 Site는 자동 변경되지 않습니다. 기본 Site 및 현재 자산이나 이력에서 사용한 Site는 삭제할 수 없습니다. 사용 기록이 없는 추가 Site만 `Site 관리` 탭에서 삭제할 수 있습니다.
+일반 자산 ID는 `ASSET-00001`, 서버 ID는 `SVR-00001` 형식의 5자리 번호로 각각 독립적으로 발급됩니다. 이미 발급된 8자리 ID는 변경하지 않으며 조회·QR·재출력에 계속 사용할 수 있습니다. SVR 라벨은 등록 시 `SERVER` 유형으로 자동 지정됩니다. 기본 Site는 `IDC`, `OFFICE`이며 `/app`의 `Site 관리` 탭에서 새 Site 코드와 표시 이름을 추가할 수 있습니다. 추가된 Site는 모바일 등록·이동·탈착 및 재고 필터에 반영됩니다. Site 코드는 생성 후 변경할 수 없으며, 기존 자산의 Site는 자동 변경되지 않습니다. 기본 Site 및 현재 자산이나 이력에서 사용한 Site는 삭제할 수 없습니다. 사용 기록이 없는 추가 Site만 `Site 관리` 탭에서 삭제할 수 있습니다.
 
 ### 모바일 QR 스캔 참고
 
@@ -94,12 +95,13 @@ docker run -d --name idc-inventory -p 8080:80 -v inventory-data:/data idc-invent
 ### A4 QR 라벨 출력
 
 - 전체 재고 화면의 `QR 라벨` 탭에서 자산 유형·Site·수량을 입력해 같은 종류의 자산 여러 대를 한 번에 등록하고 QR을 인쇄합니다. 제조사·모델·P/N은 선택 항목이며 각 자산에 동일하게 저장됩니다. Serial은 1대 등록 시에만 입력할 수 있고, 여러 대의 Serial은 등록 후 개별 자산 상세에서 입력합니다. 자산마다 고유 QR 1개가 생성됩니다.
-- NET ID는 `NET-00000001`부터 독립 발급하며 등록 시 `NETWORK` 유형을 자동 지정합니다. 기존 SRV 라벨도 계속 조회·등록·장착할 수 있습니다.
+- `자산 코드 접두어 등록`에서 영문 대문자·숫자 2~8자의 접두어를 추가한 다음 등록 폼에서 선택할 수 있습니다. 자산 유형은 별도로 선택하며, 접두어별 번호는 독립적으로 `00001`부터 증가합니다. 기존 `ASSET`·`SVR`·`NET`은 그대로 사용할 수 있습니다. `SRV`는 기존 서버 ID와 충돌하지 않도록 예약되어 있습니다.
+- NET ID는 `NET-00001`부터 독립 발급하며 등록 시 `NETWORK` 유형을 자동 지정합니다. 기존 SRV 라벨도 계속 조회·등록·장착할 수 있습니다.
 - 폼텍 QR-3111의 20×20mm, 8열×13행, 104칸을 유지하고 각 칸에 10×10mm 라벨 4개를 2×2로 배치합니다. A4 한 장에 최대 416개이며 초과분은 다음 장으로 넘어갑니다.
 - 각 칸 안에서는 왼쪽 위 → 오른쪽 위 → 왼쪽 아래 → 오른쪽 아래 순서로 서로 다른 ID를 넣습니다. QR은 8×8mm이고 아래에 ID를 표시합니다. 10mm 단위 재단은 직접 해야 합니다.
 - 일부를 사용한 용지는 `첫 장 시작 칸`으로 빈칸을 건너뜁니다.
 - `첫 장 시작 칸`은 20×20mm 칸 기준(1~104)으로, 해당 칸의 왼쪽 위부터 출력합니다. 용지 위치만 정하고 ID 순번에는 영향을 주지 않습니다. `자산 등록 및 QR 생성`을 누르면 입력한 수량만큼 자산과 새 번호가 함께 생성됩니다.
-- 이전 번호를 다시 인쇄하려면 `기존 라벨 재출력`에서 시작 ID·수량·첫 장 시작 칸을 지정하세요. 이미 발급된 연속 번호만 인쇄하며 새 ID를 발급하지 않습니다. `GET /api/asset-labels/reprint?start_code=ASSET-00000001&quantity=1`로 확인합니다.
+- 이전 번호를 다시 인쇄하려면 `기존 라벨 재출력`에서 시작 ID·수량·첫 장 시작 칸을 지정하세요. 이미 발급된 연속 번호만 인쇄하며 새 ID를 발급하지 않습니다. 새 5자리와 기존 8자리 ID를 모두 지원합니다. `GET /api/asset-labels/reprint?start_code=ASSET-00001&quantity=1`로 확인합니다.
 - 브라우저 인쇄 설정에서 A4, 배율 100%, 여백 없음, 머리글·바닥글 표시 안 함을 선택합니다.
 
 ### 전체 재고와 견적 데이터

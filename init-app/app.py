@@ -39,6 +39,8 @@ def configured_emails(name: str) -> set[str]:
 ADMIN_EMAILS = configured_emails("INVENTORY_ADMIN_EMAILS")
 OPERATOR_EMAILS = configured_emails("INVENTORY_OPERATOR_EMAILS")
 PUBLIC_BASE_URL = os.environ.get("INVENTORY_PUBLIC_BASE_URL", "").rstrip("/")
+ASSET_NUMBER_WIDTH = 5
+ASSET_NUMBER_MAX = 10 ** ASSET_NUMBER_WIDTH - 1
 
 app = FastAPI(title="IDC 부품 재고 API")
 
@@ -147,6 +149,11 @@ def init_db():
             CREATE TABLE IF NOT EXISTS network_id_sequence (
                 singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
                 next_value INTEGER NOT NULL CHECK (next_value > 0)
+            );
+            CREATE TABLE IF NOT EXISTS asset_code_prefixes (
+                prefix TEXT PRIMARY KEY,
+                next_value INTEGER NOT NULL DEFAULT 1 CHECK (next_value > 0),
+                created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS sites (
                 code TEXT PRIMARY KEY,
@@ -259,6 +266,8 @@ def init_db():
             VALUES (1, 1);
             INSERT OR IGNORE INTO network_id_sequence (singleton, next_value)
             VALUES (1, 1);
+            INSERT OR IGNORE INTO asset_code_prefixes (prefix, created_at)
+            VALUES ('ASSET', 'system'), ('SVR', 'system'), ('NET', 'system');
             INSERT OR IGNORE INTO sites (code, name, created_at)
             VALUES ('IDC', '데이터센터', 'system');
             INSERT OR IGNORE INTO sites (code, name, created_at)
@@ -412,11 +421,16 @@ class AssetCreateIn(BaseModel):
         "GPU", "PSU", "SERVER", "NETWORK", "OTHER",
     ]
     site_type: str = Field(min_length=2, max_length=24, pattern=r"^[A-Z][A-Z0-9_-]*$")
+    code_prefix: Optional[str] = Field(default=None, min_length=2, max_length=8, pattern=r"^[A-Z][A-Z0-9]{1,7}$")
     quantity: int = Field(default=1, ge=1, le=500)
     serial_number: Optional[str] = Field(default=None, max_length=240)
     manufacturer: Optional[str] = Field(default=None, max_length=240)
     model: Optional[str] = Field(default=None, max_length=240)
     part_number: Optional[str] = Field(default=None, max_length=240)
+
+
+class AssetCodePrefixIn(BaseModel):
+    prefix: str = Field(min_length=2, max_length=8, pattern=r"^[A-Z][A-Z0-9]{1,7}$")
 
 
 class SiteIn(BaseModel):
@@ -472,7 +486,7 @@ class AssetDetailsPatch(BaseModel):
 
 
 class AssignmentIn(BaseModel):
-    target_asset_code: str = Field(pattern=r"^(?:SVR|SRV)-\d{8}$")
+    target_asset_code: str = Field(pattern=r"^[A-Z][A-Z0-9]{1,7}-(?:\d{5}|\d{8})$")
     slot: Optional[str] = Field(default=None, max_length=120)
 
 
@@ -483,6 +497,30 @@ class AssignmentRemovalIn(BaseModel):
 
 
 # ---------- API ----------
+@app.get("/api/asset-code-prefixes")
+def list_asset_code_prefixes():
+    with get_db() as conn:
+        return [dict(row) for row in conn.execute(
+            """SELECT prefix FROM asset_code_prefixes
+               ORDER BY CASE prefix WHEN 'ASSET' THEN 0 WHEN 'SVR' THEN 1 WHEN 'NET' THEN 2 ELSE 3 END, prefix"""
+        ).fetchall()]
+
+
+@app.post("/api/asset-code-prefixes", status_code=201)
+def create_asset_code_prefix(item: AssetCodePrefixIn, _actor: str = Depends(require_admin)):
+    if item.prefix == "SRV":
+        raise HTTPException(409, "SRV is reserved for legacy server IDs")
+    with get_db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("SELECT 1 FROM asset_code_prefixes WHERE prefix = ?", (item.prefix,)).fetchone():
+            raise HTTPException(409, "asset code prefix already exists")
+        conn.execute(
+            "INSERT INTO asset_code_prefixes (prefix, created_at) VALUES (?, ?)",
+            (item.prefix, datetime.now(timezone.utc).isoformat()),
+        )
+    return {"prefix": item.prefix}
+
+
 def require_site(conn: sqlite3.Connection, code: str) -> None:
     if conn.execute("SELECT 1 FROM sites WHERE code = ?", (code,)).fetchone() is None:
         raise HTTPException(422, "unknown site; add it in Site management first")
@@ -776,6 +814,8 @@ def issue_asset_labels(
         first = conn.execute(
             "SELECT next_value FROM asset_id_sequence WHERE singleton = 1"
         ).fetchone()["next_value"]
+        if first + request.quantity - 1 > ASSET_NUMBER_MAX:
+            raise HTTPException(409, "asset ID sequence exhausted")
         conn.execute(
             "UPDATE asset_id_sequence SET next_value = ? WHERE singleton = 1",
             (first + request.quantity,),
@@ -783,7 +823,7 @@ def issue_asset_labels(
         created_at = datetime.now(timezone.utc).isoformat()
         asset_codes = []
         for sequence_number in range(first, first + request.quantity):
-            asset_code = f"ASSET-{sequence_number:08d}"
+            asset_code = f"ASSET-{sequence_number:05d}"
             conn.execute(
                 """INSERT INTO asset_labels
                    (asset_code, sequence_number, registration_status, created_at)
@@ -819,6 +859,8 @@ def issue_equipment_labels(request: AssetLabelIssueIn, sequence_table: str, pref
         first = conn.execute(
             f"SELECT next_value FROM {sequence_table} WHERE singleton = 1"
         ).fetchone()["next_value"]
+        if first + request.quantity - 1 > ASSET_NUMBER_MAX:
+            raise HTTPException(409, "asset ID sequence exhausted")
         conn.execute(
             f"UPDATE {sequence_table} SET next_value = ? WHERE singleton = 1",
             (first + request.quantity,),
@@ -829,7 +871,7 @@ def issue_equipment_labels(request: AssetLabelIssueIn, sequence_table: str, pref
             "SELECT MIN(COALESCE(MIN(sequence_number), 0), 0) FROM asset_labels"
         ).fetchone()[0]
         for sequence_number in range(first, first + request.quantity):
-            asset_code = f"{prefix}-{sequence_number:08d}"
+            asset_code = f"{prefix}-{sequence_number:05d}"
             internal_sequence -= 1
             conn.execute(
                 """INSERT INTO asset_labels
@@ -846,15 +888,16 @@ def issue_equipment_labels(request: AssetLabelIssueIn, sequence_table: str, pref
 
 @app.get("/api/asset-labels/reprint")
 def reprint_asset_labels(
-    start_code: str = Query(pattern=r"^(?:ASSET|SVR|SRV|NET)-\d{8}$"),
+    start_code: str = Query(pattern=r"^[A-Z][A-Z0-9]{1,7}-(?:\d{5}|\d{8})$"),
     quantity: int = Query(ge=1, le=500),
     _actor: str = Depends(require_admin),
 ):
     prefix, first_text = start_code.split("-", 1)
     first = int(first_text)
-    if first + quantity - 1 > 99999999:
-        raise HTTPException(422, "label number exceeds eight digits")
-    asset_codes = [f"{prefix}-{number:08d}" for number in range(first, first + quantity)]
+    width = len(first_text)
+    if first + quantity - 1 > 10 ** width - 1:
+        raise HTTPException(422, "label number exceeds code width")
+    asset_codes = [f"{prefix}-{number:0{width}d}" for number in range(first, first + quantity)]
     with get_db() as conn:
         placeholders = ",".join("?" for _ in asset_codes)
         existing = {
@@ -938,12 +981,9 @@ def list_assets(
 @app.post("/api/assets", status_code=201)
 def create_asset(asset: AssetCreateIn, actor: str = Depends(require_admin)):
     """Register physical assets and allocate one printable QR ID per asset atomically."""
-    if asset.asset_type == "SERVER":
-        sequence_table, prefix = "server_id_sequence", "SVR"
-    elif asset.asset_type == "NETWORK":
-        sequence_table, prefix = "network_id_sequence", "NET"
-    else:
-        sequence_table, prefix = "asset_id_sequence", "ASSET"
+    prefix = asset.code_prefix or ("SVR" if asset.asset_type == "SERVER" else
+                                   "NET" if asset.asset_type == "NETWORK" else "ASSET")
+    legacy_sequences = {"ASSET": "asset_id_sequence", "SVR": "server_id_sequence", "NET": "network_id_sequence"}
     created_at = datetime.now(timezone.utc).isoformat()
     details = {
         key: (getattr(asset, key) or "").strip() or None
@@ -954,22 +994,34 @@ def create_asset(asset: AssetCreateIn, actor: str = Depends(require_admin)):
     with get_db() as conn:
         conn.execute("BEGIN IMMEDIATE")
         require_site(conn, asset.site_type)
-        sequence_number = conn.execute(
+        prefix_row = conn.execute(
+            "SELECT next_value FROM asset_code_prefixes WHERE prefix = ?", (prefix,)
+        ).fetchone()
+        if prefix_row is None:
+            raise HTTPException(422, "unknown asset code prefix; add it first")
+        sequence_table = legacy_sequences.get(prefix)
+        sequence_number = (conn.execute(
             f"SELECT next_value FROM {sequence_table} WHERE singleton = 1"
-        ).fetchone()["next_value"]
-        if sequence_number + asset.quantity - 1 > 99999999:
+        ).fetchone()["next_value"] if sequence_table else prefix_row["next_value"])
+        if sequence_number + asset.quantity - 1 > ASSET_NUMBER_MAX:
             raise HTTPException(409, "asset ID sequence exhausted")
-        conn.execute(
-            f"UPDATE {sequence_table} SET next_value = ? WHERE singleton = 1",
-            (sequence_number + asset.quantity,),
-        )
+        if sequence_table:
+            conn.execute(
+                f"UPDATE {sequence_table} SET next_value = ? WHERE singleton = 1",
+                (sequence_number + asset.quantity,),
+            )
+        else:
+            conn.execute(
+                "UPDATE asset_code_prefixes SET next_value = ? WHERE prefix = ?",
+                (sequence_number + asset.quantity, prefix),
+            )
         internal_sequence = 0 if prefix == "ASSET" else conn.execute(
             "SELECT MIN(COALESCE(MIN(sequence_number), 0), 0) - 1 FROM asset_labels"
         ).fetchone()[0]
         asset_codes = []
         for offset in range(asset.quantity):
             number = sequence_number + offset
-            asset_code = f"{prefix}-{number:08d}"
+            asset_code = f"{prefix}-{number:05d}"
             label_sequence = number if prefix == "ASSET" else internal_sequence - offset
             conn.execute(
                 """INSERT INTO asset_labels

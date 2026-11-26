@@ -6,8 +6,8 @@
   <meta name="description" content="개별 자산 원장에서 집계한 전체 인프라 재고 현황">
   <title>InfraStock · 전체 재고 현황</title>
   <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/dashboard.css?v=asset-batch-1">
-  <script src="/dashboard.js?v=asset-batch-1" defer></script>
+  <link rel="stylesheet" href="/dashboard.css?v=prefix-catalog-1">
+  <script src="/dashboard.js?v=asset-id-5-1" defer></script>
   <script src="/purchase-quotes.js?v=sites-3" defer></script>
 </head>
 <body>
@@ -141,7 +141,22 @@
           <p>20×20mm 칸마다 10×10mm 라벨 4개를 2×2로 배치합니다. A4 104칸에 최대 416개를 출력하며, 각 칸 안에서는 왼쪽 위 → 오른쪽 위 → 왼쪽 아래 → 오른쪽 아래 순서입니다. 출력 후 10mm 단위로 직접 재단하세요. 인쇄 설정은 배율 100%와 여백 없음을 사용하세요. 첫 장 시작 칸은 용지의 위치만 바꾸며 ID 번호에는 영향을 주지 않습니다.</p>
           <p><a href="/label-10mm-preview" target="_blank" rel="noopener">10×10mm 소형 QR 시험 렌더링 보기</a> · 예시 코드이며 실제 자산 ID는 발급하지 않습니다.</p>
         </div>
+        <div class="label-prefix-management">
+          <h3>자산 코드 접두어 등록</h3>
+          <p>접두어를 한 번 등록하면 자산 유형과 별도로 선택할 수 있습니다. 접두어마다 00001부터 독립적으로 번호가 붙습니다.</p>
+          <form id="prefix-add-form" class="label-issue-form">
+            <div class="field"><label for="prefix-new-code">새 접두어</label><input id="prefix-new-code" required minlength="2" maxlength="8" pattern="[A-Z][A-Z0-9]{1,7}" placeholder="예: SSD" autocapitalize="characters" spellcheck="false"><small>영문 대문자로 시작, 영문 대문자·숫자 2~8자</small></div>
+            <button id="prefix-add-button" class="button secondary" type="submit">접두어 추가</button>
+          </form>
+          <p id="prefix-add-error" class="site-add-error" role="alert" hidden></p>
+          <p id="prefix-list" class="prefix-list" aria-label="등록된 자산 코드 접두어"></p>
+        </div>
         <form id="label-issue-form" class="label-issue-form">
+          <div class="field">
+            <label for="label-code-prefix">자산 코드 접두어</label>
+            <select id="label-code-prefix" required><option value="">접두어 선택</option></select>
+            <small>접두어와 자산 유형을 각각 선택합니다.</small>
+          </div>
           <div class="field">
             <label for="label-asset-type">자산 유형</label>
             <select id="label-asset-type" required>
@@ -153,7 +168,7 @@
               <option value="SERVER">SERVER</option><option value="NETWORK">NETWORK</option>
               <option value="OTHER">OTHER</option>
             </select>
-            <small>서버는 SVR, 네트워크 장비는 NET ID로 등록됩니다.</small>
+            <small>자산 유형은 접두어와 별도로 저장됩니다.</small>
           </div>
           <div class="field">
             <label for="label-site">현재 Site</label>
@@ -177,7 +192,7 @@
           <form id="label-reprint-form" class="label-issue-form">
             <div class="field">
               <label for="reprint-start-code">시작 ID</label>
-              <input id="reprint-start-code" type="text" required pattern="(ASSET|SVR|SRV|NET)-[0-9]{8}" placeholder="ASSET-00000001" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="reprint-code-hint">
+              <input id="reprint-start-code" type="text" required pattern="[A-Z][A-Z0-9]{1,7}-([0-9]{5}|[0-9]{8})" placeholder="ASSET-00001" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="reprint-code-hint">
               <small id="reprint-code-hint">인쇄할 첫 번째 발급 번호를 입력하세요.</small>
             </div>
             <div class="field">

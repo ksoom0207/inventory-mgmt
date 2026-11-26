@@ -9,7 +9,7 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/mobile.css?v=inventory-nav-1">
-  <script src="/mobile.js?v=camera-zoom-1" defer></script>
+  <script src="/mobile.js?v=asset-id-5-1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -29,7 +29,7 @@
     <section id="screen-home" class="screen" aria-labelledby="home-title">
       <div class="eyebrow">모바일 자산 등록</div>
       <h1 id="home-title">현장에서 바로<br>스캔하고 등록하세요</h1>
-      <p class="lead">자산 ID를 확인한 뒤 자산 유형과 Site를 선택하면 끝납니다. SVR은 서버, NET은 네트워크 장비로 자동 등록됩니다.</p>
+      <p class="lead">QR을 스캔하면 등록된 자산의 정보와 이력을 확인할 수 있습니다. 기존 미등록 라벨도 여기서 등록할 수 있습니다.</p>
 
       <button id="start-scan" class="scan-button" type="button">
         <span class="scan-icon" aria-hidden="true">
@@ -44,12 +44,12 @@
       <form id="asset-lookup-form" class="lookup-card" novalidate>
         <label for="asset-code">자산 ID 직접 입력</label>
         <div class="input-row">
-          <input id="asset-code" name="asset_code" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ASSET / SVR / NET-00000001" aria-describedby="asset-code-hint asset-code-error">
+          <input id="asset-code" name="asset_code" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="예: ASSET-00001" aria-describedby="asset-code-hint asset-code-error">
           <button class="icon-button" type="submit" aria-label="자산 ID 조회">
             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
           </button>
         </div>
-        <p id="asset-code-hint" class="field-hint">QR 아래에 적힌 8자리 번호를 입력하세요.</p>
+        <p id="asset-code-hint" class="field-hint">QR 아래에 적힌 5자리 번호를 입력하세요. 기존 8자리 ID도 조회할 수 있습니다.</p>
         <p id="asset-code-error" class="field-error" role="alert"></p>
       </form>
 
@@ -96,7 +96,7 @@
 
       <div class="asset-code-card">
         <span>자산 ID</span>
-        <strong id="register-code">ASSET-00000000</strong>
+        <strong id="register-code">ASSET-00000</strong>
         <span class="status-badge neutral">미등록</span>
       </div>
 
@@ -213,7 +213,7 @@
     <section id="screen-install" class="screen has-sticky-action" hidden aria-labelledby="install-title">
       <div class="screen-topbar"><button class="back-button" type="button" data-back-detail aria-label="자산 상세로 돌아가기"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><div><div class="eyebrow">사용처 연결</div><h1 id="install-title">서버 장착</h1></div></div>
       <form id="install-form">
-        <div class="form-field"><label for="target-server">서버 ID</label><input id="target-server" type="text" required pattern="(SVR|SRV)-[0-9]{8}" placeholder="SVR-00000001" autocomplete="off" autocapitalize="characters"><p class="field-hint">등록된 SVR 라벨 번호를 입력하세요.</p></div>
+        <div class="form-field"><label for="target-server">서버 ID</label><input id="target-server" type="text" required pattern="[A-Z][A-Z0-9]{1,7}-([0-9]{5}|[0-9]{8})" placeholder="SVR-00001" autocomplete="off" autocapitalize="characters"><p class="field-hint">등록된 SERVER 자산 ID를 입력하세요.</p></div>
         <div class="form-field"><label for="target-slot">Slot / Bay</label><input id="target-slot" type="text" maxlength="120" placeholder="예: Bay-04"></div>
         <div class="sticky-action"><p id="install-error" class="submit-error" role="alert"></p><button id="install-submit" class="button primary full-width" type="submit">장착 완료</button></div>
       </form>

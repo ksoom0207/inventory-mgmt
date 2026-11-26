@@ -1,5 +1,5 @@
 const API = "/api";
-const ASSET_CODE_PATTERN = /^(?:ASSET|SVR|SRV|NET)-\d{8}$/;
+const ASSET_CODE_PATTERN = /^[A-Z][A-Z0-9]{1,7}-(?:\d{5}|\d{8})$/;
 const ASSET_TYPES = ["SSD", "HDD", "MEMORY", "NIC", "HBA", "RAID_CONTROLLER", "GPU", "PSU", "OTHER"];
 const STATUS_LABELS = { AVAILABLE: "사용 가능", IN_USE: "사용 중", RESERVED: "예약", FAULTY: "장애", RMA: "RMA", REPAIR: "수리 중", DISPOSED: "폐기", LOST: "분실", UNKNOWN: "확인 필요" };
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
@@ -27,7 +27,7 @@ function showScreen(name, { focus = true } = {}) {
 
 function normalizeAssetCode(rawValue) {
   const value = String(rawValue || "").trim().toUpperCase();
-  const pathMatch = value.match(/\/A\/((?:ASSET|SVR|SRV|NET)-\d{8})(?:[/?#]|$)/i);
+  const pathMatch = value.match(/\/A\/([A-Z][A-Z0-9]{1,7}-(?:\d{5}|\d{8}))(?:[/?#]|$)/i);
   return pathMatch ? pathMatch[1].toUpperCase() : value;
 }
 
@@ -64,7 +64,7 @@ async function lookupAsset(rawCode) {
   const code = normalizeAssetCode(rawCode);
   if (!ASSET_CODE_PATTERN.test(code)) {
     const error = $("#asset-code-error");
-    error.textContent = "ASSET-, SVR- 또는 NET- 뒤에 숫자 8자리를 입력하세요.";
+    error.textContent = "자산 코드 접두어-숫자 5자리 형식으로 입력하세요. 기존 8자리 코드도 사용할 수 있습니다.";
     $("#asset-code").setAttribute("aria-invalid", "true");
     $("#asset-code").focus();
     return;
@@ -517,7 +517,7 @@ $("#install-form").addEventListener("submit", async (event) => {
   try {
     await request(`/assets/${encodeURIComponent(currentAsset.asset_code)}/assignments`, { method: "POST", body: JSON.stringify({ target_asset_code: $("#target-server").value.trim().toUpperCase(), slot: $("#target-slot").value.trim() || null }) });
     currentAsset = await request(`/assets/${encodeURIComponent(currentAsset.asset_code)}`); showDetail(currentAsset); announce("서버 장착을 완료했습니다.");
-  } catch (error) { $("#install-error").textContent = error.status === 422 ? "등록된 SVR 번호를 확인하세요." : "장착하지 못했습니다. 다시 시도하세요."; }
+  } catch (error) { $("#install-error").textContent = error.status === 422 ? "등록된 SERVER 자산 ID를 확인하세요." : "장착하지 못했습니다. 다시 시도하세요."; }
   finally { button.disabled = false; button.textContent = "장착 완료"; }
 });
 
@@ -536,7 +536,7 @@ renderAssetTypes();
 renderRecent();
 loadSites().then(renderRecent).catch(() => {});
 
-const deepLinkMatch = location.pathname.match(/^\/a\/((?:ASSET|SVR|SRV|NET)-\d{8})\/?$/i);
+const deepLinkMatch = location.pathname.match(/^\/a\/([A-Z][A-Z0-9]{1,7}-(?:\d{5}|\d{8}))\/?$/i);
 if (deepLinkMatch) lookupAsset(deepLinkMatch[1]);
 else showScreen("home", { focus: false });
 

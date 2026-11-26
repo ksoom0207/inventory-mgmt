@@ -13,19 +13,22 @@ _Avoid_: 품목, 재고 항목, Part
 _Avoid_: 카테고리, 부품명, RAM, RAID_CONTROLLE
 
 **자산 ID (Asset Identifier)**:
-자산에 내부적으로 부여한 전역 고유 식별자. 일반 자산 ID, 서버 ID, 네트워크 장비 ID를 포함하며 제조사 Serial Number와는 별개다.
+자산에 내부적으로 부여한 전역 고유 식별자. 자산 코드 접두어와 5자리 번호로 이루어지며 제조사 Serial Number와는 별개다. 기존 8자리 ID도 같은 자산 ID로 유지한다.
 _Avoid_: Serial, 부품 ID
 
+**자산 코드 접두어 (Asset Code Prefix)**:
+자산 ID 앞부분에 붙는 사용자가 등록한 코드. 접두어별 번호는 독립적이며 자산 유형과는 별도로 선택한다.
+
 **일반 자산 ID (Asset ID)**:
-서버와 네트워크 장비를 제외한 자산의 식별자. `ASSET-00000001`부터 독립적으로 순차 발급한다.
+`ASSET` 접두어를 가진 자산 ID. 새 번호는 `ASSET-00001` 형식으로 발급한다.
 _Avoid_: 서버 ID, SVR
 
 **서버 ID (Server ID)**:
-SERVER 자산의 식별자. `SVR-00000001`부터 일반 자산 ID와 독립적으로 순차 발급한다.
+`SVR` 접두어를 가진 자산 ID. 새 번호는 `SVR-00001` 형식으로 발급한다.
 _Avoid_: Server Asset ID, ASSET 서버
 
 **네트워크 장비 ID (Network Equipment ID)**:
-NETWORK 자산의 식별자. NET-00000001부터 다른 자산 ID와 독립적으로 순차 발급한다.
+`NET` 접두어를 가진 자산 ID. 새 번호는 `NET-00001` 형식으로 발급한다.
 
 **미등록 라벨 (Unassigned Label)**:
 자산 ID가 발급되었지만 아직 실제 자산에 연결되지 않은 QR 라벨.
