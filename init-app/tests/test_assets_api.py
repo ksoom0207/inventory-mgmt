@@ -1002,3 +1002,17 @@ def test_purchase_offer_creation_requires_admin(client, monkeypatch):
     assert client.post("/api/purchase-offers", json=payload).status_code == 401
     assert client.post("/api/purchase-offers", json=payload,
                        headers={"Cf-Access-Authenticated-User-Email": "operator@example.com"}).status_code == 403
+
+
+def test_register_five_ssds_with_shared_specifications(client):
+    specs = {"capacity": {"value": 1.92, "unit": "TB"}, "interface": "SAS", "disk_size": "2.5인치"}
+    batch = {"asset_type": "SSD", "site_type": "IDC", "quantity": 5}
+    assert client.post("/api/assets", json={**batch, "specifications": {"ddr": "DDR4"}}).status_code == 422
+    result = client.post("/api/assets", json={**batch, "specifications": specs})
+    assert result.status_code == 201
+    codes = result.json()["asset_codes"]
+    assert codes == [f"ASSET-{number:05d}" for number in range(1, 6)]
+    for code in codes:
+        assert client.get(f"/api/assets/{code}").json()["specifications"] == specs
+    groups = client.get("/api/inventory/summary?group_by=specification").json()["items"]
+    assert len(groups) == 1 and groups[0]["registered"] == 5

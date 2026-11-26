@@ -44,6 +44,31 @@ $("#site-list").addEventListener("click",async e=>{const button=e.target.closest
 $("#site-new-code").addEventListener("input",e=>{const start=e.target.selectionStart,end=e.target.selectionEnd;e.target.value=e.target.value.toUpperCase();e.target.setSelectionRange(start,end)});
 $("#quote-body").addEventListener("change",async e=>{const nameId=e.target.dataset.quoteName,partNumberId=e.target.dataset.quotePartNumber,priceId=e.target.dataset.quotePrice;try{if(nameId)await api(`/quotes/${nameId}`,{method:"PATCH",body:JSON.stringify({name:e.target.value.trim()})});if(partNumberId)await api(`/quotes/${partNumberId}`,{method:"PATCH",body:JSON.stringify({part_number:e.target.value.trim()})});if(priceId){const raw=e.target.value.replace(/,/g,"").trim(),price=Number(raw);if(raw===""||!Number.isSafeInteger(price)||price<0)throw Error("기준 단가는 0 이상의 정수로 입력하세요.");await api(`/quotes/${priceId}/prices`,{method:"PUT",body:JSON.stringify({date:$("#quote-date").value||today(),price})})}await loadQuotes();toast("견적 품목을 저장했습니다.")}catch(err){toast(`저장하지 못했습니다: ${err.message}`)}});
 $("#quote-body").addEventListener("click",async e=>{const id=e.target.dataset.deleteQuote;if(!id||!confirm("이 견적 항목과 단가 기록을 삭제할까요?"))return;try{await api(`/quotes/${id}`,{method:"DELETE"});await loadQuotes();toast("견적 항목을 삭제했습니다.")}catch(err){toast(`삭제하지 못했습니다: ${err.message}`)}});
+let batchSpecSchema;
+let specFormVersion = 0;
+async function showBatchSpecs() {
+  const version = ++specFormVersion;
+  const type = $("#label-asset-type").value;
+  const fields = $("#batch-spec-fields");
+  fields.replaceChildren();
+  $("#batch-specs").hidden = !type;
+  if (!type) return;
+  fields.textContent = "사양을 불러오는 중…";
+  try {
+    batchSpecSchema ??= await api("/asset-specifications");
+    if (version === specFormVersion) {
+      renderSpecificationForm(fields, {asset_type: type}, batchSpecSchema);
+    }
+  } catch {
+    if (version !== specFormVersion) return;
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "사양 다시 불러오기";
+    retry.addEventListener("click", showBatchSpecs);
+    fields.replaceChildren(retry);
+  }
+}
+$("#label-asset-type").addEventListener("change", showBatchSpecs);
 $("#label-issue-form").addEventListener("submit", async event => {
   event.preventDefault();
   const quantity = Number($("#label-quantity").value);
@@ -60,6 +85,7 @@ $("#label-issue-form").addEventListener("submit", async event => {
   try {
     const created = await api("/assets", {method:"POST", body:JSON.stringify({
       asset_type: $("#label-asset-type").value, site_type: $("#label-site").value,
+      specifications: readSpecificationForm(),
       code_prefix: $("#label-code-prefix").value, quantity, serial_number: serial || null,
       manufacturer: $("#label-manufacturer").value.trim() || null,
       model: $("#label-model").value.trim() || null, part_number: $("#label-part-number").value.trim() || null

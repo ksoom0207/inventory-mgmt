@@ -6,8 +6,9 @@
   <meta name="description" content="개별 자산 원장에서 집계한 전체 인프라 재고 현황">
   <title>InfraStock · 전체 재고 현황</title>
   <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/dashboard.css?v=print-selection-1">
-  <script src="/dashboard.js?v=print-selection-1" defer></script>
+  <link rel="stylesheet" href="/dashboard.css?v=batch-specs-1">
+  <script src="/specification-form.js" defer></script>
+  <script src="/dashboard.js?v=batch-specs-1" defer></script>
   <script src="/purchase-quotes.js?v=sites-3" defer></script>
 </head>
 <body>
@@ -174,6 +175,10 @@
           <div class="field"><label for="label-manufacturer">제조사 (선택)</label><input id="label-manufacturer" maxlength="240"></div>
           <div class="field"><label for="label-model">모델 (선택)</label><input id="label-model" maxlength="240"></div>
           <div class="field"><label for="label-part-number">P/N (선택)</label><input id="label-part-number" maxlength="240"></div>
+          <fieldset id="batch-specs" hidden><legend>공통 사양 (선택)</legend>
+            <small>이번에 등록하는 모든 자산에 적용됩니다.</small>
+            <div id="batch-spec-fields"></div>
+          </fieldset>
           <button id="issue-labels" class="button primary" type="submit">자산 등록</button>
         </form>
         <p id="registration-result" role="status"></p>

@@ -1,5 +1,5 @@
-const CACHE_NAME = "infrastock-mobile-v12";
-const APP_SHELL = ["/mobile", "/mobile.css?v=inventory-nav-1", "/mobile.js?v=asset-id-5-1", "/manifest.webmanifest", "/icon-192.svg", "/icon-512.svg"];
+const CACHE_NAME = "infrastock-mobile-v13";
+const APP_SHELL = ["/mobile", "/mobile.css?v=inventory-nav-1", "/specification-form.js", "/mobile.js?v=batch-specs-1", "/manifest.webmanifest", "/icon-192.svg", "/icon-512.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

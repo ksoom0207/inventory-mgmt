@@ -416,6 +416,7 @@ class AssetRegistrationIn(BaseModel):
 
 
 class AssetCreateIn(BaseModel):
+    specifications: dict = Field(default_factory=dict)
     asset_type: Literal[
         "SSD", "HDD", "MEMORY", "NIC", "HBA", "RAID_CONTROLLER",
         "GPU", "PSU", "SERVER", "NETWORK", "OTHER",
@@ -978,6 +979,33 @@ def list_assets(
     return result
 
 
+def validate_specifications(asset_type: str, specifications: dict | None) -> dict:
+    validated = {}
+    for key, value in (specifications or {}).items():
+        if key not in SPEC_TYPES[asset_type] + ["notes"]:
+            raise HTTPException(422, "해당 자산 유형에 맞지 않는 사양입니다.")
+        field = SPEC_FIELDS[key]
+        if field.get("text"):
+            if not isinstance(value, str) or len(value) > 1000:
+                raise HTTPException(422, "추가 사양은 1000자 이내로 입력하세요.")
+            if value.strip():
+                validated[key] = value.strip()
+        elif "options" in field:
+            if value not in field["options"]:
+                raise HTTPException(422, "지원하지 않는 사양 종류입니다.")
+            validated[key] = value
+        else:
+            if not isinstance(value, dict) or set(value) != {"value", "unit"}:
+                raise HTTPException(422, "사양의 숫자와 단위를 함께 입력하세요.")
+            number = value["value"]
+            if type(number) not in (int, float) or not 0 < number <= 1000000000 or value["unit"] not in field["units"]:
+                raise HTTPException(422, "사양은 올바른 단위와 0보다 큰 숫자로 입력하세요.")
+            if field.get("integer") and int(number) != number:
+                raise HTTPException(422, "포트 수는 정수로 입력하세요.")
+            validated[key] = value
+    return validated
+
+
 @app.post("/api/assets", status_code=201)
 def create_asset(asset: AssetCreateIn, actor: str = Depends(require_admin)):
     """Register physical assets and allocate one printable QR ID per asset atomically."""
@@ -989,6 +1017,8 @@ def create_asset(asset: AssetCreateIn, actor: str = Depends(require_admin)):
         key: (getattr(asset, key) or "").strip() or None
         for key in ("serial_number", "manufacturer", "model", "part_number")
     }
+    specs = validate_specifications(asset.asset_type, asset.specifications)
+    encoded_specs = json.dumps(specs, ensure_ascii=False)
     if asset.quantity > 1 and details["serial_number"]:
         raise HTTPException(422, "serial_number must be entered per asset when quantity is greater than one")
     with get_db() as conn:
@@ -1032,18 +1062,18 @@ def create_asset(asset: AssetCreateIn, actor: str = Depends(require_admin)):
             conn.execute(
                 """INSERT INTO assets
                    (asset_code, asset_type, status, site_type, serial_number, manufacturer,
-                    model, part_number, created_at, updated_at)
-                   VALUES (?, ?, 'AVAILABLE', ?, ?, ?, ?, ?, ?, ?)""",
+                    model, part_number, specifications, created_at, updated_at)
+                   VALUES (?, ?, 'AVAILABLE', ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (asset_code, asset.asset_type, asset.site_type, details["serial_number"],
                  details["manufacturer"], details["model"], details["part_number"],
-                 created_at, created_at),
+                 encoded_specs, created_at, created_at),
             )
             conn.execute(
                 """INSERT INTO asset_events
                    (asset_code, action, before_data, after_data, actor, created_at)
                    VALUES (?, 'REGISTER', NULL, ?, ?, ?)""",
                 (asset_code, json.dumps({"asset_type": asset.asset_type, "status": "AVAILABLE",
-                                         "site_type": asset.site_type, **details}, ensure_ascii=False),
+                                         "site_type": asset.site_type, "specifications": specs, **details}, ensure_ascii=False),
                  actor, created_at),
             )
             asset_codes.append(asset_code)
@@ -1110,30 +1140,7 @@ def update_asset_details(
         asset_type = before.pop("asset_type")
         before["specifications"] = json.loads(before["specifications"])
         if "specifications" in patch.model_fields_set:
-            validated = {}
-            for key, value in (specifications or {}).items():
-                if key not in SPEC_TYPES[asset_type] + ["notes"]:
-                    raise HTTPException(422, "해당 자산 유형에 맞지 않는 사양입니다.")
-                field = SPEC_FIELDS[key]
-                if field.get("text"):
-                    if not isinstance(value, str) or len(value) > 1000:
-                        raise HTTPException(422, "추가 사양은 1000자 이내로 입력하세요.")
-                    if value.strip():
-                        validated[key] = value.strip()
-                elif "options" in field:
-                    if value not in field["options"]:
-                        raise HTTPException(422, "지원하지 않는 사양 종류입니다.")
-                    validated[key] = value
-                else:
-                    if not isinstance(value, dict) or set(value) != {"value", "unit"}:
-                        raise HTTPException(422, "사양의 숫자와 단위를 함께 입력하세요.")
-                    number = value["value"]
-                    if type(number) not in (int, float) or not 0 < number <= 1000000000 or value["unit"] not in field["units"]:
-                        raise HTTPException(422, "사양은 올바른 단위와 0보다 큰 숫자로 입력하세요.")
-                    if field.get("integer") and int(number) != number:
-                        raise HTTPException(422, "포트 수는 정수로 입력하세요.")
-                    validated[key] = value
-            changes["specifications"] = validated
+            changes["specifications"] = validate_specifications(asset_type, specifications)
         after = {**before, **changes}
         if before != after:
             changed_at = datetime.now(timezone.utc).isoformat()
@@ -1641,6 +1648,11 @@ def dashboard_styles():
 @app.get("/label-10mm-preview")
 def label_10mm_preview():
     return FileResponse(os.path.join(BASE_DIR, "label-10mm-preview.html"), headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/specification-form.js")
+def specification_form_script():
+    return FileResponse(os.path.join(BASE_DIR, "specification-form.js"), media_type="text/javascript")
 
 
 @app.get("/dashboard.js")
