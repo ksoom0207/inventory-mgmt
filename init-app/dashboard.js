@@ -16,8 +16,8 @@ async function openAssets(type,site,groupKey="",specification=""){const dialog=$
 function asOf(prices,date){return prices.filter(x=>x.date<=date).sort((a,b)=>b.date.localeCompare(a.date))[0]||null}
 function renderQuotes(){const q=$("#quote-search").value.trim().toLowerCase(),date=$("#quote-date").value||today(),rows=quoteParts.filter(x=>!q||x.name.toLowerCase().includes(q)||x.category.toLowerCase().includes(q)||(x.part_number||"").toLowerCase().includes(q)),body=$("#quote-body");$("#quote-empty").hidden=!!rows.length;body.closest(".table-wrap").hidden=!rows.length;body.innerHTML=rows.map(x=>{const p=asOf(x.prices,date);return`<tr><td data-label="부품명"><input aria-label="${esc(x.name)} 부품명" value="${esc(x.name)}" data-quote-name="${esc(x.id)}"></td><td data-label="카테고리">${esc(x.category)}</td><td data-label="P/N"><input aria-label="${esc(x.name)} P/N" value="${esc(x.part_number||"")}" data-quote-part-number="${esc(x.id)}"></td><td data-label="기준 단가" class="number"><input aria-label="${esc(x.name)} 기준 단가" inputmode="numeric" value="${p?p.price.toLocaleString("ko-KR"):""}" data-quote-price="${esc(x.id)}"></td><td><button class="button danger small" type="button" data-delete-quote="${esc(x.id)}">삭제</button></td></tr>`}).join("")}
 async function loadQuotes(){try{quoteParts=await api("/quotes");renderQuotes();document.dispatchEvent(new Event("quote-catalog-changed"))}catch(e){toast(`견적을 불러오지 못했습니다: ${e.message}`)}}
-function selectTab(name){document.querySelectorAll("[role=tab]").forEach(tab=>{const on=tab.dataset.tab===name;tab.classList.toggle("active",on);tab.setAttribute("aria-selected",String(on));$("#panel-"+tab.dataset.tab).hidden=!on});if(name==="sites")loadSites().catch(e=>toast(`Site 목록을 불러오지 못했습니다: ${e.message}`));if(name==="quote"){if(!quoteParts.length)loadQuotes();document.dispatchEvent(new Event("quote-tab-selected"))}}
-$("[data-open-label]").addEventListener("click",()=>{selectTab("label");$("#label-asset-type").focus()});
+function selectTab(name){document.querySelectorAll("[role=tab]").forEach(tab=>{const on=tab.dataset.tab===name;tab.classList.toggle("active",on);tab.setAttribute("aria-selected",String(on));$("#panel-"+tab.dataset.tab).hidden=!on});if(name==="label")loadPrintAssets();if(name==="sites")loadSites().catch(e=>toast(`Site 목록을 불러오지 못했습니다: ${e.message}`));if(name==="quote"){if(!quoteParts.length)loadQuotes();document.dispatchEvent(new Event("quote-tab-selected"))}}
+$("[data-open-label]").addEventListener("click",()=>{selectTab("register");$("#label-asset-type").focus()});
 $("#label-asset-type").addEventListener("change",()=>{const select=$("#label-code-prefix");if(!select.value)select.value=$("#label-asset-type").value==="SERVER"?"SVR":$("#label-asset-type").value==="NETWORK"?"NET":"ASSET"});
 $("#prefix-new-code").addEventListener("input",e=>{const start=e.target.selectionStart,end=e.target.selectionEnd;e.target.value=e.target.value.toUpperCase();e.target.setSelectionRange(start,end)});
 $("#prefix-add-form").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,code=$("#prefix-new-code").value.trim().toUpperCase(),button=$("#prefix-add-button"),error=$("#prefix-add-error");error.hidden=true;button.disabled=true;try{await api("/asset-code-prefixes",{method:"POST",body:JSON.stringify({prefix:code})});await loadPrefixes();$("#label-code-prefix").value=code;form.reset();toast(`${code} 접두어를 추가했습니다.`)}catch(err){error.textContent=`접두어를 추가하지 못했습니다: ${err.message}`;error.hidden=false}finally{button.disabled=false}});
@@ -36,7 +36,7 @@ function renderLabelSheets(codes,startPosition){
   }).join("");
 }
 async function waitForLabelImages(){const images=[...document.querySelectorAll("#label-preview img")];await Promise.all(images.map(image=>image.complete?Promise.resolve():new Promise(resolve=>{image.addEventListener("load",resolve,{once:true});image.addEventListener("error",resolve,{once:true})})));return images.every(image=>image.naturalWidth>0)}
-async function showLabelPreview(codes,startPosition,labelName){renderLabelSheets(codes,startPosition);$("#label-result-actions").hidden=false;$("#print-labels").disabled=true;$("#label-status").textContent=`${codes.length}개 ${labelName}의 QR 이미지를 준비하는 중입니다.`;const ready=await waitForLabelImages();$("#print-labels").disabled=!ready;$("#label-status").textContent=ready?`${codes.length}개 ${labelName} 라벨이 준비됐습니다.`:"일부 QR 이미지를 불러오지 못했습니다. 새로고침 후 다시 시도하세요."}
+async function showLabelPreview(codes,startPosition,labelName){renderLabelSheets(codes,startPosition);$("#label-result-actions").hidden=false;$("#print-labels").disabled=true;$("#label-status").textContent=`${codes.length}개 ${labelName}의 QR 이미지를 준비하는 중입니다.`;const sheet=$("#label-preview").firstElementChild;const ready=await waitForLabelImages();if(sheet!==$("#label-preview").firstElementChild)return;$("#print-labels").disabled=!ready;$("#label-status").textContent=ready?`${codes.length}개 ${labelName} 라벨이 준비됐습니다.`:"일부 QR 이미지를 불러오지 못했습니다. 새로고침 후 다시 시도하세요."}
 document.querySelectorAll("[role=tab]").forEach(tab=>{tab.addEventListener("click",()=>selectTab(tab.dataset.tab));tab.addEventListener("keydown",e=>{const tabs=[...document.querySelectorAll("[role=tab]")],i=tabs.indexOf(tab);let next=null;if(e.key==="ArrowRight")next=tabs[(i+1)%tabs.length];if(e.key==="ArrowLeft")next=tabs[(i-1+tabs.length)%tabs.length];if(e.key==="Home")next=tabs[0];if(e.key==="End")next=tabs[tabs.length-1];if(next){e.preventDefault();next.focus();selectTab(next.dataset.tab)}})});$("#stock-site").addEventListener("change",renderInventory);$("#stock-type").addEventListener("change",renderInventory);$("#refresh-stock").addEventListener("click",()=>loadSites().catch(e=>toast(`Site 목록을 불러오지 못했습니다: ${e.message}`)).finally(loadInventory));$("#stock-body").addEventListener("click",e=>{const b=e.target.closest("[data-view-assets]");if(b)openAssets(b.dataset.type,b.dataset.site,b.dataset.group,b.dataset.specification)});$("[data-dialog-close]").addEventListener("click",()=>$("#asset-dialog").close());$("#asset-dialog").addEventListener("click",e=>{if(e.target===e.currentTarget)e.currentTarget.close()});$("#quote-search").addEventListener("input",renderQuotes);$("#quote-date").addEventListener("change",renderQuotes);
 $("#quote-add-form").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,name=$("#quote-new-name").value.trim(),category=$("#quote-new-category").value.trim()||"기타",partNumber=$("#quote-new-part-number").value.trim(),rawPrice=$("#quote-new-price").value.trim(),price=Number(rawPrice),button=form.querySelector("button[type=submit]");if(!name||rawPrice!==""&&(!Number.isSafeInteger(price)||price<0)){toast("부품명과 0 이상의 정수 단가를 확인하세요.");return}button.disabled=true;try{const made=await api("/quotes",{method:"POST",body:JSON.stringify({name,category,part_number:partNumber||null})});if(rawPrice!=="")await api(`/quotes/${made.id}/prices`,{method:"PUT",body:JSON.stringify({date:$("#quote-date").value||today(),price})});form.reset();await loadQuotes();toast("견적 품목을 추가했습니다.")}catch(err){toast(`추가하지 못했습니다: ${err.message}`)}finally{button.disabled=false}});
 $("#site-add-form").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,button=$("#site-add-button"),error=$("#site-management-error"),code=$("#site-new-code").value.trim().toUpperCase(),name=$("#site-new-name").value.trim();error.hidden=true;button.disabled=true;button.textContent="추가 중…";try{await api("/sites",{method:"POST",body:JSON.stringify({code,name})});form.reset();await loadSites();toast(`${name} Site를 추가했습니다.`)}catch(err){const messages={"admin role required":"관리자 권한이 필요합니다.","site code already exists":"이미 사용 중인 코드입니다. 다른 코드를 입력하세요.","site name already exists":"이미 사용 중인 이름입니다. 다른 이름을 입력하세요."};error.textContent=`Site를 추가하지 못했습니다: ${messages[err.message]||err.message}`;error.hidden=false}finally{button.disabled=false;button.textContent="Site 추가"}});
@@ -44,7 +44,99 @@ $("#site-list").addEventListener("click",async e=>{const button=e.target.closest
 $("#site-new-code").addEventListener("input",e=>{const start=e.target.selectionStart,end=e.target.selectionEnd;e.target.value=e.target.value.toUpperCase();e.target.setSelectionRange(start,end)});
 $("#quote-body").addEventListener("change",async e=>{const nameId=e.target.dataset.quoteName,partNumberId=e.target.dataset.quotePartNumber,priceId=e.target.dataset.quotePrice;try{if(nameId)await api(`/quotes/${nameId}`,{method:"PATCH",body:JSON.stringify({name:e.target.value.trim()})});if(partNumberId)await api(`/quotes/${partNumberId}`,{method:"PATCH",body:JSON.stringify({part_number:e.target.value.trim()})});if(priceId){const raw=e.target.value.replace(/,/g,"").trim(),price=Number(raw);if(raw===""||!Number.isSafeInteger(price)||price<0)throw Error("기준 단가는 0 이상의 정수로 입력하세요.");await api(`/quotes/${priceId}/prices`,{method:"PUT",body:JSON.stringify({date:$("#quote-date").value||today(),price})})}await loadQuotes();toast("견적 품목을 저장했습니다.")}catch(err){toast(`저장하지 못했습니다: ${err.message}`)}});
 $("#quote-body").addEventListener("click",async e=>{const id=e.target.dataset.deleteQuote;if(!id||!confirm("이 견적 항목과 단가 기록을 삭제할까요?"))return;try{await api(`/quotes/${id}`,{method:"DELETE"});await loadQuotes();toast("견적 항목을 삭제했습니다.")}catch(err){toast(`삭제하지 못했습니다: ${err.message}`)}});
-$("#label-issue-form").addEventListener("submit",async e=>{e.preventDefault();const assetType=$("#label-asset-type").value,siteType=$("#label-site").value,codePrefix=$("#label-code-prefix").value,quantity=Number($("#label-quantity").value),startPosition=Number($("#label-start-position").value),button=$("#issue-labels");if(!assetType||!siteType||!codePrefix||!Number.isInteger(quantity)||quantity<1||quantity>500||!Number.isInteger(startPosition)||startPosition<1||startPosition>104)return;const body={asset_type:assetType,site_type:siteType,code_prefix:codePrefix,quantity,serial_number:$("#label-serial").value.trim()||null,manufacturer:$("#label-manufacturer").value.trim()||null,model:$("#label-model").value.trim()||null,part_number:$("#label-part-number").value.trim()||null};if(quantity>1&&body.serial_number){toast("여러 대 등록 시 Serial Number를 비우세요. 등록 후 각 자산에 입력할 수 있습니다.");$("#label-serial").focus();return}button.disabled=true;button.textContent="자산 등록 중…";try{const created=await api("/assets",{method:"POST",body:JSON.stringify(body)});$("#label-status").textContent=`${created.quantity}대 등록 완료. QR을 준비하는 중입니다.`;$("#label-result-actions").hidden=false;await loadInventory();await showLabelPreview(created.asset_codes,startPosition,"자산");$("#label-status").textContent=`${created.quantity}대 등록 완료 (${created.asset_codes[0]}~${created.asset_codes.at(-1)}) · ${$("#label-status").textContent}`;$("#reprint-start-code").value=created.asset_code;$("#reprint-quantity").value=created.quantity;$("#label-serial").value=""}catch(err){toast(`자산을 등록하지 못했습니다: ${err.message}`)}finally{button.disabled=false;button.textContent="자산 등록 및 QR 생성"}});
-$("#label-reprint-form").addEventListener("submit",async e=>{e.preventDefault();const startCode=$("#reprint-start-code").value.trim().toUpperCase(),quantity=Number($("#reprint-quantity").value),startPosition=Number($("#reprint-start-position").value),button=$("#reprint-labels");if(!/^[A-Z][A-Z0-9]{1,7}-(?:\d{5}|\d{8})$/.test(startCode)||!Number.isInteger(quantity)||quantity<1||quantity>500||!Number.isInteger(startPosition)||startPosition<1||startPosition>104)return;button.disabled=true;button.textContent="기존 번호 확인 중…";$("#label-result-actions").hidden=true;$("#label-preview").innerHTML="";try{const issued=await api(`/asset-labels/reprint?${new URLSearchParams({start_code:startCode,quantity})}`);await showLabelPreview(issued.asset_codes,startPosition,"기존 ID")}catch(err){toast(`재출력할 수 없습니다: ${err.message}`)}finally{button.disabled=false;button.textContent="기존 번호 불러오기"}});
+$("#label-issue-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const quantity = Number($("#label-quantity").value);
+  const serial = $("#label-serial").value.trim();
+  if (quantity > 1 && serial) {
+    toast("여러 대 등록 시 Serial Number를 비우세요.");
+    $("#label-serial").focus();
+    return;
+  }
+  const button = $("#issue-labels");
+  button.disabled = true;
+  const result = $("#registration-result");
+  result.textContent = "등록 중…";
+  try {
+    const created = await api("/assets", {method:"POST", body:JSON.stringify({
+      asset_type: $("#label-asset-type").value, site_type: $("#label-site").value,
+      code_prefix: $("#label-code-prefix").value, quantity, serial_number: serial || null,
+      manufacturer: $("#label-manufacturer").value.trim() || null,
+      model: $("#label-model").value.trim() || null, part_number: $("#label-part-number").value.trim() || null
+    })});
+    result.textContent = created.quantity + "건 등록 완료 · " + created.asset_codes[0]
+      + (created.quantity > 1 ? " ~ " + created.asset_codes.at(-1) : "");
+    $("#label-serial").value = "";
+    await loadInventory();
+  } catch (error) { result.textContent = "등록 실패 · " + error.message; }
+  finally { button.disabled = false; }
+});
+
+let printAssets = [];
+const selectedCodes = new Set();
+let printListRequest = 0;
+function filteredPrintAssets() {
+  const query = $("#print-search").value.trim().toLowerCase();
+  return printAssets.filter(asset => [asset.asset_code, asset.asset_type, siteLabel(asset.site_type)]
+    .some(value => value.toLowerCase().includes(query)));
+}
+function updatePrintSelection() {
+  $("#label-preview").replaceChildren();
+  $("#label-result-actions").hidden = true;
+  $("#print-labels").disabled = true;
+  $("#preview-selected").disabled = !selectedCodes.size;
+  $("#preview-selected").textContent = "선택 " + selectedCodes.size + "건 미리보기";
+}
+function renderPrintList() {
+  const visible = filteredPrintAssets();
+  $("#print-assets").innerHTML = visible.map(asset =>
+    `<label><input type="checkbox" value="${esc(asset.asset_code)}" ${selectedCodes.has(asset.asset_code) ? "checked" : ""}> <strong>${esc(asset.asset_code)}</strong> · ${esc(asset.asset_type)} · ${esc(siteLabel(asset.site_type))}</label>`
+  ).join("") || "해당하는 등록 자산이 없습니다.";
+}
+async function loadPrintAssets() {
+  const request = ++printListRequest;
+  printAssets = [];
+  updatePrintSelection();
+  $("#preview-selected").disabled = true;
+  $("#print-assets").textContent = "등록 자산을 조회하는 중…";
+  try {
+    const assets = await api("/assets");
+    if (request !== printListRequest) return;
+    printAssets = assets;
+    const available = new Set(assets.map(asset => asset.asset_code));
+    for (const code of selectedCodes) if (!available.has(code)) selectedCodes.delete(code);
+    updatePrintSelection();
+    renderPrintList();
+  } catch (error) {
+    if (request === printListRequest) {
+      selectedCodes.clear();
+      updatePrintSelection();
+      $("#print-assets").textContent = "자산 조회 실패 · " + error.message;
+    }
+  }
+}
+$("#print-assets").addEventListener("change", event => {
+  const input = event.target;
+  if (input.checked) selectedCodes.add(input.value);
+  else selectedCodes.delete(input.value);
+  updatePrintSelection();
+});
+$("#print-search").addEventListener("input", renderPrintList);
+$("#select-visible").addEventListener("click", () => {
+  filteredPrintAssets().forEach(asset => selectedCodes.add(asset.asset_code));
+  updatePrintSelection();
+  renderPrintList();
+});
+$("#clear-selection").addEventListener("click", () => {
+  selectedCodes.clear();
+  updatePrintSelection();
+  renderPrintList();
+});
+$("#label-start-position").addEventListener("input", updatePrintSelection);
+$("#print-selection").addEventListener("submit", async event => {
+  event.preventDefault();
+  const codes = printAssets.map(asset => asset.asset_code).filter(code => selectedCodes.has(code));
+  if (codes.length) await showLabelPreview(codes, Number($("#label-start-position").value), "자산");
+});
 $("#print-labels").addEventListener("click",()=>window.print());
 $("#quote-date").value=today();loadSites().catch(e=>toast(`Site 목록을 불러오지 못했습니다: ${e.message}`)).finally(loadInventory);loadPrefixes().catch(e=>toast(`자산 코드 목록을 불러오지 못했습니다: ${e.message}`));
