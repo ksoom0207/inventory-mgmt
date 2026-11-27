@@ -1016,3 +1016,44 @@ def test_register_five_ssds_with_shared_specifications(client):
         assert client.get(f"/api/assets/{code}").json()["specifications"] == specs
     groups = client.get("/api/inventory/summary?group_by=specification").json()["items"]
     assert len(groups) == 1 and groups[0]["registered"] == 5
+
+
+def test_epson_csv_exports_selected_registered_assets_with_qr_urls(client, monkeypatch):
+    import csv
+    import io
+    monkeypatch.setattr(sys.modules["app"], "PUBLIC_BASE_URL", "https://inventory.example")
+    codes = client.post("/api/assets", json={"asset_type": "SSD", "site_type": "IDC", "quantity": 3}).json()["asset_codes"]
+    selected = [codes[2], codes[0]]
+    path = "/api/asset-labels/epson.csv"
+    for selection in ([codes[1]], selected):
+        result = client.post(path, json=selection)
+        assert result.status_code == 200
+        assert result.content.startswith(b"\xef\xbb\xbf")
+        rows = list(csv.reader(io.StringIO(result.content.decode("utf-8-sig"))))
+        assert rows == [["자산 ID", "자산 URL"]] + [
+            [code, client.get(f"/api/asset-labels/{code}/qr.svg").headers["x-qr-content"]] for code in selection
+        ]
+    assert client.post(path, json=[]).status_code == 422
+    assert client.post(path, json=selected + ["ASSET-99999"]).status_code == 404
+
+
+def test_memory_grouping_matches_asset_drilldown(client):
+    def register(capacity=32, ddr="DDR4", speed=3200):
+        specs = {"capacity": {"value": capacity, "unit": "GB"}, "ddr": ddr}
+        if speed:
+            specs["memory_speed"] = {"value": speed, "unit": "MT/s"}
+        return client.post("/api/assets", json={"asset_type": "MEMORY", "site_type": "IDC",
+                                                "specifications": specs}).json()["asset_code"]
+
+    same = [register(), register(speed=3200.0)]
+    register(capacity=16)
+    register(ddr="DDR5")
+    register(speed=2666)
+    register(speed=None)
+    groups = client.get("/api/inventory/summary?group_by=specification").json()["items"]
+    assert len(groups) == 5
+    assert any(g["specification_label"] == "사양 미입력" for g in groups)
+    group = next(g for g in groups if g["specification_label"] == "32 GB · DDR4 · 3200 MT/s")
+    assert group["registered"] == 2
+    rows = client.get("/api/assets", params={"site_type": "IDC", "group_key": group["group_key"]}).json()
+    assert [row["asset_code"] for row in rows] == same

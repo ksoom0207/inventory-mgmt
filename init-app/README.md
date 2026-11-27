@@ -42,7 +42,7 @@ docker run -d --name idc-inventory -p 8080:80 -v inventory-data:/data idc-invent
 
 ## 데이터 저장
 
-전체 재고 화면은 SSD·HDD를 용량·인터페이스·폼팩터별로 묶습니다. 단위 통일, 사양 미입력 처리 및 다른 부품의 권장 기준은 [재고 집계 기준](../docs/inventory-grouping.md)을 참고하세요.
+전체 재고 화면은 SSD·HDD를 용량·인터페이스·폼팩터별로, 메모리를 용량·DDR 규격·속도별로 묶습니다. 단위 통일, 사양 미입력 처리 및 다른 부품의 권장 기준은 [재고 집계 기준](../docs/inventory-grouping.md)을 참고하세요.
 - SQLite 파일(`/data/inventory.db`)에 저장되며, `inventory-data` 볼륨으로 영속화됩니다.
 - 컨테이너를 재시작하거나 이미지를 다시 빌드해도 데이터가 유지됩니다.
 - 접속하는 모든 브라우저/사용자가 같은 재고 데이터를 봅니다.

@@ -116,10 +116,14 @@ function filteredPrintAssets() {
   return printAssets.filter(asset => [asset.asset_code, asset.asset_type, siteLabel(asset.site_type)]
     .some(value => value.toLowerCase().includes(query)));
 }
+function selectedPrintCodes() {
+  return printAssets.map(asset => asset.asset_code).filter(code => selectedCodes.has(code));
+}
 function updatePrintSelection() {
   $("#label-preview").replaceChildren();
   $("#label-result-actions").hidden = true;
   $("#print-labels").disabled = true;
+  $("#download-epson").disabled = !printAssets.length || !selectedCodes.size;
   $("#preview-selected").disabled = !selectedCodes.size;
   $("#preview-selected").textContent = "선택 " + selectedCodes.size + "건 미리보기";
 }
@@ -171,8 +175,30 @@ $("#clear-selection").addEventListener("click", () => {
 $("#label-start-position").addEventListener("input", updatePrintSelection);
 $("#print-selection").addEventListener("submit", async event => {
   event.preventDefault();
-  const codes = printAssets.map(asset => asset.asset_code).filter(code => selectedCodes.has(code));
+  const codes = selectedPrintCodes();
   if (codes.length) await showLabelPreview(codes, Number($("#label-start-position").value), "자산");
+});
+$("#download-epson").addEventListener("click", async () => {
+  const codes = selectedPrintCodes();
+  if (!codes.length) return;
+  try {
+    const response = await fetch(API + "/asset-labels/epson.csv", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(codes)
+    });
+    if (!response.ok) throw new Error((await response.json()).detail || response.statusText);
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "epson-labels.csv";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    toast("CSV 다운로드 실패 · " + error.message);
+  }
 });
 $("#print-labels").addEventListener("click",()=>window.print());
 $("#quote-date").value=today();loadSites().catch(e=>toast(`Site 목록을 불러오지 못했습니다: ${e.message}`)).finally(loadInventory);loadPrefixes().catch(e=>toast(`자산 코드 목록을 불러오지 못했습니다: ${e.message}`));

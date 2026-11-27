@@ -12,7 +12,7 @@ Site는 자산의 위치를 구분하는 축이다. 같은 Site 안에서도 부
 |---|---|---|---|
 | SSD | 용량 + 인터페이스 + 폼팩터 | P/N, 내구도, 섹터 규격 | 적용 |
 | HDD | 용량 + 인터페이스 + 폼팩터 | RPM, 섹터 규격, P/N | 적용 |
-| 메모리 | 용량 + DDR 버전 + DIMM 종류 | MT/s, ECC, Rank, P/N | 추후 |
+| 메모리 | 용량 + DDR 버전 + 속도(MT/s) | DIMM 종류, ECC, Rank, P/N | 적용 |
 | NIC | 포트당 속도 + 포트 수 + 커넥터 | PCIe/OCP 규격, P/N | 추후 |
 | GPU | 제조사 + 모델 + VRAM 용량 | 슬롯 크기, 전력 | 추후 |
 | PSU | 출력 + P/N | AC/DC, 호환 서버 | 추후 |
@@ -23,7 +23,7 @@ Site는 자산의 위치를 구분하는 축이다. 같은 Site 안에서도 부
 
 ## SSD·HDD 도입
 
-전체 재고 화면은 `유형 + Site + SSD·HDD 사양`별로 행을 표시한다. SSD·HDD 외 유형은 기존 `유형 + Site` 집계를 유지한다. Site·유형 필터와 상태별 수량 열을 제공한다. 상태는 그룹 키에 넣지 않고 사용 가능·사용 중·장애·폐기 등으로 센다. 별도의 상태 선택 필터는 이번 범위에 포함하지 않는다.
+전체 재고 화면은 `유형 + Site + 사양`별로 행을 표시한다. SSD·HDD·메모리 외 유형은 기존 `유형 + Site` 집계를 유지한다. Site·유형 필터와 상태별 수량 열을 제공한다. 상태는 그룹 키에 넣지 않고 사용 가능·사용 중·장애·폐기 등으로 센다. 별도의 상태 선택 필터는 이번 범위에 포함하지 않는다.
 
 SSD·HDD 집계에는 `specifications.capacity`, `interface`, `disk_size`를 사용한다.
 
@@ -41,6 +41,6 @@ SSD·HDD 집계에는 `specifications.capacity`, `interface`, `disk_size`를 사
 
 ## API와 확장
 
-`GET /api/inventory/summary?group_by=specification`은 SSD·HDD 사양별 집계를 반환한다. 기본 호출과 `group_by=type`은 기존 유형·Site 집계를 유지한다. SSD·HDD 행의 `group_key`는 클라이언트가 해석하지 않고 `GET /api/assets?asset_type=SSD&site_type=IDC&group_key=...`에 그대로 전달한다. 요약과 자산 목록은 동일한 집계 키 함수를 사용한다.
+`GET /api/inventory/summary?group_by=specification`은 SSD·HDD·메모리 사양별 집계를 반환한다. 기본 호출과 `group_by=type`은 기존 유형·Site 집계를 유지한다. SSD·HDD 행의 `group_key`는 클라이언트가 해석하지 않고 `GET /api/assets?asset_type=SSD&site_type=IDC&group_key=...`에 그대로 전달한다. 요약과 자산 목록은 동일한 집계 키 함수를 사용한다.
 
 다른 유형은 필수 사양·단위·누락값 처리 기준을 먼저 확정한 뒤 확대한다. P/N별 세분화와 상태 선택 필터는 후속 기능이다.

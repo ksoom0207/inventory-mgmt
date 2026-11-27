@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import io
+import csv
 import json
 import sqlite3
 import time
@@ -582,31 +583,41 @@ def delete_site(code: str, _actor: str = Depends(require_admin)):
     return {"ok": True}
 
 
-def storage_inventory_group(asset_type: str, specifications: str):
+def specification_group(asset_type: str, specifications: str):
     """One canonical key shared by summary rows and their asset drill-down."""
+    if asset_type not in ("SSD", "HDD", "MEMORY"):
+        return {}
     specs = json.loads(specifications or "{}")
+    incomplete = {"group_key": f"{asset_type.lower()}:incomplete", "specification_label": "사양 미입력"}
     capacity = specs.get("capacity") or {}
-    interface = specs.get("interface")
-    form_factor = specs.get("disk_size")
     try:
         value = Decimal(str(capacity.get("value")))
         unit = capacity.get("unit")
-        complete = (
-            value.is_finite() and value > 0 and unit in ("GB", "TB")
-            and interface in SPEC_FIELDS["interface"]["options"]
-            and form_factor in SPEC_FIELDS["disk_size"]["options"]
-            and form_factor != "기타"
-        )
+        if not value.is_finite() or value <= 0 or unit not in ("GB", "TB"):
+            return incomplete
+        if asset_type == "MEMORY":
+            ddr = specs.get("ddr")
+            speed = specs.get("memory_speed") or {}
+            rate = Decimal(str(speed.get("value")))
+            if (ddr not in SPEC_FIELDS["ddr"]["options"] or speed.get("unit") != "MT/s"
+                    or not rate.is_finite() or rate <= 0):
+                return incomplete
+            attributes = [ddr, f"{rate.normalize():f} MT/s"]
+        else:
+            interface = specs.get("interface")
+            form_factor = specs.get("disk_size")
+            if (interface not in SPEC_FIELDS["interface"]["options"]
+                    or form_factor not in SPEC_FIELDS["disk_size"]["options"] or form_factor == "기타"):
+                return incomplete
+            attributes = [interface, form_factor]
     except (InvalidOperation, AttributeError):
-        complete = False
-    if not complete:
-        return {"group_key": f"{asset_type.lower()}:incomplete", "specification_label": "사양 미입력"}
+        return incomplete
     gb = value * (1000 if unit == "TB" else 1)
     canonical = format(gb.normalize(), "f")
     display_value, display_unit = (gb / 1000, "TB") if gb >= 1000 else (gb, "GB")
     return {
-        "group_key": json.dumps([asset_type, canonical, interface, form_factor], ensure_ascii=False, separators=(",", ":")),
-        "specification_label": f"{format(display_value.normalize(), 'f')} {display_unit} · {interface} · {form_factor}",
+        "group_key": json.dumps([asset_type, canonical, *attributes], ensure_ascii=False, separators=(",", ":")),
+        "specification_label": f"{format(display_value.normalize(), 'f')} {display_unit} · {' · '.join(attributes)}",
     }
 
 
@@ -619,7 +630,7 @@ def inventory_summary(group_by: Literal["type", "specification"] = "type"):
             ).fetchall()
         groups = {}
         for row in rows:
-            spec = storage_inventory_group(row["asset_type"], row["specifications"]) if row["asset_type"] in ("SSD", "HDD") else {}
+            spec = specification_group(row["asset_type"], row["specifications"])
             key = (row["asset_type"], row["site_type"], spec.get("group_key"))
             if key not in groups:
                 groups[key] = {
@@ -913,6 +924,32 @@ def reprint_asset_labels(
     return {"asset_codes": asset_codes}
 
 
+def asset_detail_url(request: Request, asset_code: str) -> str:
+    base_url = PUBLIC_BASE_URL or str(request.base_url).rstrip("/")
+    return f"{base_url}/a/{asset_code}"
+
+
+@app.post("/api/asset-labels/epson.csv")
+def export_epson_labels(asset_codes: list[str], request: Request):
+    codes = list(dict.fromkeys(asset_codes))
+    if not codes:
+        raise HTTPException(422, "출력할 자산을 선택하세요.")
+    with get_db() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM assets WHERE asset_code IN (SELECT value FROM json_each(?))",
+            (json.dumps(codes),),
+        ).fetchone()[0]
+    if count != len(codes):
+        raise HTTPException(404, "선택한 자산 중 등록되지 않은 ID가 있습니다.")
+
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(["자산 ID", "자산 URL"])
+    writer.writerows((code, asset_detail_url(request, code)) for code in codes)
+    return Response(output.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="epson-labels.csv"'})
+
+
 @app.get("/api/asset-labels/{asset_code}/qr.svg")
 def asset_label_qr(asset_code: str, request: Request):
     with get_db() as conn:
@@ -923,8 +960,7 @@ def asset_label_qr(asset_code: str, request: Request):
     if exists is None:
         raise HTTPException(404, "asset label not found")
 
-    base_url = PUBLIC_BASE_URL or str(request.base_url).rstrip("/")
-    content = f"{base_url}/a/{asset_code}"
+    content = asset_detail_url(request, asset_code)
     qr = segno.make_qr(content, error="M")
     output = io.BytesIO()
     qr.save(output, kind="svg", scale=4, border=4, dark="#0f172a", light="#ffffff")
@@ -970,7 +1006,7 @@ def list_assets(
     result = []
     for row in rows:
         if group_key is not None and (
-            row["asset_type"] not in ("SSD", "HDD") or storage_inventory_group(row["asset_type"], row["specifications"])["group_key"] != group_key
+            specification_group(row["asset_type"], row["specifications"]).get("group_key") != group_key
         ):
             continue
         item = dict(row)
