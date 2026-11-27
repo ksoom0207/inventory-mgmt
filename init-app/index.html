@@ -6,10 +6,10 @@
   <meta name="description" content="개별 자산 원장에서 집계한 전체 인프라 재고 현황">
   <title>InfraStock · 전체 재고 현황</title>
   <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/dashboard.css?v=register-dialog-1">
+  <link rel="stylesheet" href="/dashboard.css?v=offer-dialog-1">
   <script src="/specification-form.js" defer></script>
   <script src="/dashboard.js?v=register-dialog-1" defer></script>
-  <script src="/purchase-quotes.js?v=sites-3" defer></script>
+  <script src="/purchase-quotes.js?v=offer-dialog-1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -102,21 +102,8 @@
         <div class="field"><label for="quote-date">비교 기준일</label><input id="quote-date" type="date"></div>
       </div>
       <section class="table-card purchase-card" aria-labelledby="purchase-table-title">
-        <div class="section-heading"><div><h2 id="purchase-table-title">공급사별 구매 견적</h2><p>같은 품목·수량·부가세 기준의 유효 견적만 최저 금액으로 표시합니다. 금액은 원화(KRW)이며 합계는 수량 × 단가 + 배송비입니다.</p></div><span id="offer-count" class="count-badge"></span></div>
-        <form id="purchase-offer-form" class="purchase-offer-form">
-          <div class="field"><label for="offer-item">견적 품목</label><select id="offer-item" required><option value="">품목 선택</option></select></div>
-          <div class="field"><label for="offer-supplier">공급사</label><input id="offer-supplier" required maxlength="120" placeholder="예: 공급사 A"></div>
-          <div class="field"><label for="offer-quantity">수량</label><input id="offer-quantity" type="number" min="1" max="1000000" step="1" value="1" required></div>
-          <div class="field"><label for="offer-unit-price">단가 (원)</label><input id="offer-unit-price" type="number" min="0" step="1" inputmode="numeric" required></div>
-          <div class="field"><label for="offer-shipping">배송비 (원)</label><input id="offer-shipping" type="number" min="0" step="1" inputmode="numeric" value="0" required></div>
-          <div class="field"><label for="offer-tax-basis">부가세 기준</label><select id="offer-tax-basis" required><option value="EXCLUDED">별도</option><option value="INCLUDED">포함</option></select></div>
-          <div class="field"><label for="offer-date">견적일</label><input id="offer-date" type="date" required></div>
-          <div class="field"><label for="offer-valid-until">유효기간 종료일</label><input id="offer-valid-until" type="date"></div>
-          <div class="field"><label for="offer-lead-days">납기 (일)</label><input id="offer-lead-days" type="number" min="0" step="1" inputmode="numeric" placeholder="미정"></div>
-          <div class="field"><label for="offer-ref">공급사 견적번호</label><input id="offer-ref" maxlength="120" placeholder="선택 항목"></div>
-          <button id="offer-save" class="button primary" type="submit">공급사 견적 기록</button>
-        </form>
-        <p id="offer-form-error" class="offer-form-error" role="alert" hidden></p>
+        <div class="section-heading"><div><h2 id="purchase-table-title">공급사별 구매 견적</h2><p>같은 품목·수량·부가세 기준의 유효 견적만 최저 금액으로 표시합니다. 금액은 원화(KRW)이며 합계는 수량 × 단가 + 배송비입니다.</p></div><div class="offer-actions"><span id="offer-count" class="count-badge"></span><button id="open-offer" class="button primary" type="button" aria-haspopup="dialog" aria-controls="offer-dialog">공급사 견적 등록</button></div></div>
+        <p id="offer-list-error" class="offer-form-error" role="alert" hidden></p>
         <div class="table-wrap"><table><thead><tr><th>품목 · P/N</th><th>공급사</th><th class="number">수량</th><th class="number">단가</th><th class="number">배송비</th><th class="number">비교 금액</th><th>부가세</th><th>견적일 · 유효기간</th><th>납기</th><th>상태</th></tr></thead><tbody id="offer-body"></tbody></table></div>
         <div id="offer-empty" class="empty-state" hidden><h3>공급사 견적이 없습니다</h3><p>아래에서 품목을 만든 뒤 공급사 견적을 기록하세요.</p></div>
       </section>
@@ -164,6 +151,24 @@
       <div id="label-preview" class="label-preview" aria-label="A4 QR 라벨 미리보기"></div>
     </section>
   </main>
+
+  <dialog id="offer-dialog" aria-labelledby="offer-dialog-title">
+    <div class="dialog-header"><h2 id="offer-dialog-title">공급사 견적 등록</h2><button id="close-offer" class="button secondary" type="button">닫기</button></div>
+        <form id="purchase-offer-form" class="purchase-offer-form">
+          <div class="field"><label for="offer-item">견적 품목</label><select id="offer-item" required><option value="">품목 선택</option></select></div>
+          <div class="field"><label for="offer-supplier">공급사</label><input id="offer-supplier" required maxlength="120" placeholder="예: 공급사 A"></div>
+          <div class="field"><label for="offer-quantity">수량</label><input id="offer-quantity" type="number" min="1" max="1000000" step="1" value="1" required></div>
+          <div class="field"><label for="offer-unit-price">단가 (원)</label><input id="offer-unit-price" type="number" min="0" step="1" inputmode="numeric" required></div>
+          <div class="field"><label for="offer-shipping">배송비 (원)</label><input id="offer-shipping" type="number" min="0" step="1" inputmode="numeric" value="0" required></div>
+          <div class="field"><label for="offer-tax-basis">부가세 기준</label><select id="offer-tax-basis" required><option value="EXCLUDED">별도</option><option value="INCLUDED">포함</option></select></div>
+          <div class="field"><label for="offer-date">견적일</label><input id="offer-date" type="date" required></div>
+          <div class="field"><label for="offer-valid-until">유효기간 종료일</label><input id="offer-valid-until" type="date"></div>
+          <div class="field"><label for="offer-lead-days">납기 (일)</label><input id="offer-lead-days" type="number" min="0" step="1" inputmode="numeric" placeholder="미정"></div>
+          <div class="field"><label for="offer-ref">공급사 견적번호</label><input id="offer-ref" maxlength="120" placeholder="선택 항목"></div>
+          <button id="offer-save" class="button primary" type="submit">공급사 견적 기록</button>
+        </form>
+        <p id="offer-form-error" class="offer-form-error" role="alert" hidden></p>
+  </dialog>
 
   <dialog id="register-dialog" aria-labelledby="register-title">
     <div class="dialog-header">

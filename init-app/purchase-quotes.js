@@ -66,8 +66,8 @@
         await Promise.all([loadItems(), loadOffers()]);
       } catch (error) {
         opened = false;
-        $("#offer-form-error").textContent = `구매 견적을 불러오지 못했습니다: ${error.message}`;
-        $("#offer-form-error").hidden = false;
+        $("#offer-list-error").textContent = `구매 견적을 불러오지 못했습니다: ${error.message}`;
+        $("#offer-list-error").hidden = false;
       }
     }
   }
@@ -75,19 +75,30 @@
   document.addEventListener("quote-tab-selected", openComparison);
   document.addEventListener("quote-catalog-changed", () => {
     if (opened) loadItems().catch((error) => {
-      $("#offer-form-error").textContent = `품목을 갱신하지 못했습니다: ${error.message}`;
-      $("#offer-form-error").hidden = false;
+      $("#offer-list-error").textContent = `품목을 갱신하지 못했습니다: ${error.message}`;
+      $("#offer-list-error").hidden = false;
     });
   });
   $("#quote-search").addEventListener("input", render);
   $("#quote-date").addEventListener("change", () => {
     if (opened) loadOffers().catch((error) => {
-      $("#offer-form-error").textContent = `비교 기준일을 변경하지 못했습니다: ${error.message}`;
-      $("#offer-form-error").hidden = false;
+      $("#offer-list-error").textContent = `비교 기준일을 변경하지 못했습니다: ${error.message}`;
+      $("#offer-list-error").hidden = false;
     });
   });
 
   $("#offer-date").value = new Date().toISOString().slice(0, 10);
+  const dialog = $("#offer-dialog");
+  $("#open-offer").addEventListener("click", () => {
+    $("#offer-form-error").hidden = true;
+    dialog.showModal();
+    $("#offer-item").focus();
+    if ($("#offer-item").disabled) {
+      $("#offer-form-error").textContent = "먼저 비교표 아래에서 견적 품목을 추가하세요.";
+      $("#offer-form-error").hidden = false;
+    }
+  });
+  $("#close-offer").addEventListener("click", () => dialog.close());
   $("#purchase-offer-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -95,6 +106,7 @@
     const error = $("#offer-form-error");
     error.hidden = true;
     const itemId = $("#offer-item").value;
+    if (!itemId || button.disabled) return;
     button.disabled = true;
     button.textContent = "기록 중…";
     try {
@@ -116,7 +128,13 @@
       form.reset();
       $("#offer-item").value = itemId;
       $("#offer-date").value = new Date().toISOString().slice(0, 10);
-      await loadOffers();
+      dialog.close();
+      toast("공급사 견적을 등록했습니다.");
+      $("#offer-list-error").hidden = true;
+      await loadOffers().catch((error) => {
+        $("#offer-list-error").textContent = "견적을 등록했지만 비교표를 갱신하지 못했습니다. " + error.message;
+        $("#offer-list-error").hidden = false;
+      });
     } catch (caught) {
       error.textContent = `견적을 기록하지 못했습니다: ${caught.message}`;
       error.hidden = false;

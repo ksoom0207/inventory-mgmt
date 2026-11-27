@@ -115,3 +115,11 @@ dialog{width:min(calc(100% - 32px),720px);max-height:min(760px,calc(100dvh - 48p
 #register-dialog #issue-labels { grid-column: 1 / -1; justify-self: end; margin-top: 0; }
 #registration-result:not(:empty) { margin: 0 18px 18px; }
 #registration-result:empty { display: none; }
+
+.offer-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#offer-dialog { width: min(840px, calc(100% - 24px)); }
+#offer-dialog :is(input, select) { width: 100%; min-width: 0; }
+@media (max-width: 600px) {
+  .purchase-card .section-heading { flex-direction: column; align-items: stretch; }
+  .offer-actions { justify-content: space-between; }
+}
